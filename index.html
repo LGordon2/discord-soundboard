@@ -1,0 +1,43 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="index.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/ws.js"></script>
+    <script type="text/javascript">
+        const playTimeouts = {}
+
+        const playSound = (soundId) => {
+            const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
+            const el = document.querySelector('#box-' + soundId)
+            audio.addEventListener("loadeddata", () => {
+                if (playTimeouts[soundId]) {
+                    clearTimeout(playTimeouts[soundId]);
+                }
+
+                el.classList.add('playing');
+                const timeoutId = setTimeout(() => {
+                    el.classList.remove('playing')
+                }, audio.duration * 1000)
+                playTimeouts[soundId] = timeoutId;
+                audio.play()
+            });
+
+            // audio.play();
+        }
+
+        window._playSound = playSound;
+    </script>
+    <div hx-ext="ws" ws-connect="/ws">
+        <div id="sounds"></div>
+    </div>
+    <div id="search-results"></div>
+</body>
+
+</html>
