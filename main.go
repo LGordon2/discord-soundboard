@@ -120,17 +120,18 @@ func main() {
 				i++
 			}
 
-			plusIcon := `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-		  </svg>
-		  `
+			// 	plusIcon := `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+			// 	<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+			//   </svg>
+			//   `
 			for _, storedSound := range storedSounds {
-				buf.WriteString(`<div class="flex-1 shadow-2xl rounded-md border-2 py-2 px-4 mx-96 mt-2">`)
+				buf.WriteString(addSoundCardComponent(storedSound, guildID))
+				// buf.WriteString(`<div class="flex-1 shadow-2xl rounded-md border-2 py-2 px-4 mx-96 mt-2">`)
 				// quickplay is disabled until I figure out ratelimiting
 				// qpBtn := fmt.Sprintf(`<button class="flex-1 flex flex-row text-green-500 disabled:text-slate-400" hx-post="/quickplay?soundLocation=%s&guildID=%s" hx-target="#search-results" disabled>Quickplay</button>`, storedSound, guildID)
-				addBtn := fmt.Sprintf(`<button class="flex-1 flex flex-row text-green-500 disabled:text-slate-400" hx-post="/add-sound?soundLocation=%s&guildID=%s">%s</button>`, storedSound, guildID, plusIcon)
-				buf.WriteString(fmt.Sprintf("<div class=\"flex flex-row\"><span class=\"flex-1 basis-3/4\">%s</span><div class=\"flex flex-row-reverse\">%s</div></div>", storedSound, addBtn))
-				buf.WriteString("</div>")
+				// addBtn := fmt.Sprintf(`<button class="flex-1 flex flex-row text-green-500 disabled:text-slate-400" hx-post="/add-sound?soundLocation=%s&guildID=%s">%s</button>`, storedSound, guildID, plusIcon)
+				// buf.WriteString(fmt.Sprintf("<div class=\"flex flex-row\"><span class=\"flex-1 basis-3/4\">%s</span><div class=\"flex flex-row-reverse\">%s</div></div>", storedSound, addBtn))
+				// buf.WriteString("</div>")
 			}
 			buf.WriteString("</div>")
 			err = c.WriteMessage(websocket.TextMessage, buf.Bytes())
@@ -301,7 +302,7 @@ func main() {
 	})
 	go func() {
 		fmt.Println("starting http server on localhost:3000...")
-		err := http.ListenAndServe("localhost:3000", http.DefaultServeMux)
+		err := http.ListenAndServe("0.0.0.0:3000", http.DefaultServeMux)
 		if err != nil {
 			panic(err)
 		}

@@ -5,6 +5,22 @@ import (
 	"text/template"
 )
 
+const addSoundCardComponentTmpl = `
+<div
+        class=" h-12  min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
+        <div class="flex flex-row">
+            <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
+            </h5>
+            <button class="flex shrink items-center justify-center" hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}"><svg class="h-8 w-8 text-green-500"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg></button>
+        </div>
+    </div>
+`
+
 const soundCardComponentTmpl = `
 <div id="box-{{.soundId}}"
             class="h-24 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
@@ -23,12 +39,10 @@ const soundCardComponentTmpl = `
             </div>
 
             <div class="flex flex-row divide-x divide-gray-700">
-                <button onclick="window._playSound('{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1"><svg class="h-8 w-8 text-gray-500"
-                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg></button>
+                <button onclick="window._playSound('{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1"><svg class="h-8 w-8 text-gray-500"  width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">  <path stroke="none" d="M0 0h24v24H0z"/>  <rect x="4" y="13" rx="2" width="5" height="7" />  <rect x="15" y="13" rx="2" width="5" height="7" />  <path d="M4 15v-3a8 8 0 0 1 16 0v3" /></svg></button>
+                {{ if .deleteButton }}
                 {{.deleteButton}}
+                {{ end }}
                 <!--<button class="flex flex-1 items-center justify-center mt-1" {{if .disabled}}disabled="true"{{end}}></button>-->
             </div>
             {{ else }}
@@ -48,6 +62,19 @@ func soundCardComponent(id, name string, deleteButton any) string {
 		"used":         id != "" && name != "" && deleteButton != nil,
 	}
 	err := template.Must(template.New("soundCardComponentTmpl").Parse(soundCardComponentTmpl)).Execute(&buf, m)
+	if err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
+
+func addSoundCardComponent(storedSound, guildID string) string {
+	var buf bytes.Buffer
+	m := map[string]any{
+		"soundName": storedSound,
+		"guildID":   guildID,
+	}
+	err := template.Must(template.New("addSoundCardComponentTmpl").Parse(addSoundCardComponentTmpl)).Execute(&buf, m)
 	if err != nil {
 		panic(err)
 	}
