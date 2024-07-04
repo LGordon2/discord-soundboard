@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -40,17 +41,9 @@ const guildID = "284709094588284929"   // Viznet
 const channelID = "284709094588284930" // general channel
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  50 * 1024,
-	WriteBufferSize: 50 * 1024,
+	ReadBufferSize:  20 * 1024,
+	WriteBufferSize: 20 * 1024,
 } // use default options
-
-func playButton(soundId string) string {
-	playSvg := `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-	<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
-  </svg>
-  `
-	return fmt.Sprintf(`<button onclick="window._playSound('%s')">%s</button>`, soundId, playSvg)
-}
 
 func deleteButton(soundId, guildId string, disabled bool) string {
 	textColor := "text-rose-400"
@@ -67,15 +60,12 @@ func deleteButton(soundId, guildId string, disabled bool) string {
 	return fmt.Sprintf(`<button class="flex flex-1 items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s>%s</button>`, textColor, soundId, guildId, disabledProp, minusSvg)
 }
 
-func soundDetail(name, id string) string {
-	return fmt.Sprintf(`<span class="flex basis-3/4">%s (<a class="text-sky-400" href="https://cdn.discordapp.com/soundboard-sounds/%s">%s</a>)</span>`, name, id, id)
-}
-
 func main() {
 	files, err := os.ReadDir("./sounds")
 	if err != nil {
 		panic(err)
 	}
+	var mu sync.RWMutex
 	sounds := make([]SoundboardSound, 0)
 	storedSounds := []string{}
 	for _, f := range files {
@@ -98,46 +88,34 @@ func main() {
 		// }
 		// w.Write([]byte(components))
 	})
-	clients := make(map[*websocket.Conn]bool)
+	clients := make(map[*websocket.Conn]chan []byte)
 	go func() {
 		for range soundUpdates {
 			if len(sounds) == 0 {
 				continue
 			}
-			fmt.Printf("client count: %d\n", len(clients))
-			for c := range clients {
-				var buf bytes.Buffer
-				buf.WriteString("<div id=\"sounds\" class=\"flex flex-row flex-wrap justify-center\">")
-				i := 0
-				newSoundsStr := ""
-				for _, sound := range sounds {
-					newSoundsStr += sound.Name + ", "
-				}
-				fmt.Printf("new sounds: %v\n", newSoundsStr)
-				for _, sound := range sounds {
-					disabled := sound.UserID != discordClient.userID
-					buf.WriteString(soundCardComponent(sound.ID, sound.Name, deleteButton(sound.ID, guildID, disabled)))
-					i++
-				}
-				for i < 8 {
-					buf.WriteString(soundCardComponent("", "", nil))
-					i++
-				}
-				for _, storedSound := range storedSounds {
-					buf.WriteString(addSoundCardComponent(storedSound, guildID))
-				}
-				buf.WriteString("</div>")
-				if err := c.WriteMessage(websocket.TextMessage, buf.Bytes()); err != nil {
-					opErr := &net.OpError{}
-					if errors.Is(err, websocket.ErrCloseSent) || errors.As(err, &opErr) {
-						delete(clients, c)
-						continue
-					}
-					fmt.Fprintf(os.Stderr, "[error] write: %v %T\n", err, err)
-					continue
-				}
-				fmt.Println("wrote message successfully")
+			var buf bytes.Buffer
+			buf.WriteString("<div id=\"sounds\" class=\"flex flex-row flex-wrap justify-center\">")
+			i := 0
+			for _, sound := range sounds {
+				disabled := sound.UserID != discordClient.userID
+				buf.WriteString(soundCardComponent(sound.ID, sound.Name, deleteButton(sound.ID, guildID, disabled)))
+				i++
 			}
+			for i < 8 {
+				buf.WriteString(soundCardComponent("", "", nil))
+				i++
+			}
+			for _, storedSound := range storedSounds {
+				buf.WriteString(addSoundCardComponent(storedSound, guildID))
+			}
+			buf.WriteString("</div>")
+			fmt.Printf("client count: %d\n", len(clients))
+			mu.RLock()
+			for _, c := range clients {
+				c <- buf.Bytes()
+			}
+			mu.RUnlock()
 		}
 	}()
 
@@ -148,12 +126,32 @@ func main() {
 			return
 		}
 		defer c.Close()
+		soundChan := make(chan []byte, 100)
 
-		clients[c] = true
+		mu.Lock()
+		clients[c] = soundChan
+		mu.Unlock()
+
+		go func() {
+			for sound := range soundChan {
+				c.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := c.WriteMessage(websocket.TextMessage, []byte(sound)); err != nil {
+					opErr := &net.OpError{}
+					if errors.Is(err, websocket.ErrCloseSent) || errors.As(err, &opErr) {
+						mu.Lock()
+						delete(clients, c)
+						mu.Unlock()
+						return
+					}
+					fmt.Fprintf(os.Stderr, "[error] write: %v %T\n", err, err)
+				}
+			}
+		}()
 		soundUpdates <- struct{}{}
 
 		waitChan := make(chan struct{})
 		<-waitChan
+		close(soundChan)
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
@@ -371,7 +369,6 @@ func main() {
 		}
 
 		if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
-			// json.NewEncoder(os.Stdout).Encode(recvMsg)
 			newSounds := make([]SoundboardSound, 0)
 			for _, soundboardSound := range recvMsg.Data.(map[string]interface{})["soundboard_sounds"].([]interface{}) {
 				name := soundboardSound.(map[string]interface{})["name"].(string)
@@ -380,11 +377,6 @@ func main() {
 				newSounds = append(newSounds, SoundboardSound{Name: name, ID: id, UserID: userID})
 			}
 			sounds = newSounds
-			newSoundsStr := ""
-			for _, sound := range sounds {
-				newSoundsStr += sound.Name + ", "
-			}
-			fmt.Printf("new sounds: %v\n", newSoundsStr)
 			soundUpdates <- struct{}{}
 		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
 			fetchSoundboardSounds()
