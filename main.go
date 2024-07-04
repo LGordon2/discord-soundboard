@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -96,6 +98,49 @@ func main() {
 		// }
 		// w.Write([]byte(components))
 	})
+	clients := make(map[*websocket.Conn]bool)
+	go func() {
+		for range soundUpdates {
+			if len(sounds) == 0 {
+				continue
+			}
+			fmt.Printf("client count: %d\n", len(clients))
+			for c := range clients {
+				var buf bytes.Buffer
+				buf.WriteString("<div id=\"sounds\" class=\"flex flex-row flex-wrap justify-center\">")
+				i := 0
+				newSoundsStr := ""
+				for _, sound := range sounds {
+					newSoundsStr += sound.Name + ", "
+				}
+				fmt.Printf("new sounds: %v\n", newSoundsStr)
+				for _, sound := range sounds {
+					disabled := sound.UserID != discordClient.userID
+					buf.WriteString(soundCardComponent(sound.ID, sound.Name, deleteButton(sound.ID, guildID, disabled)))
+					i++
+				}
+				for i < 8 {
+					buf.WriteString(soundCardComponent("", "", nil))
+					i++
+				}
+				for _, storedSound := range storedSounds {
+					buf.WriteString(addSoundCardComponent(storedSound, guildID))
+				}
+				buf.WriteString("</div>")
+				if err := c.WriteMessage(websocket.TextMessage, buf.Bytes()); err != nil {
+					opErr := &net.OpError{}
+					if errors.Is(err, websocket.ErrCloseSent) || errors.As(err, &opErr) {
+						delete(clients, c)
+						continue
+					}
+					fmt.Fprintf(os.Stderr, "[error] write: %v %T\n", err, err)
+					continue
+				}
+				fmt.Println("wrote message successfully")
+			}
+		}
+	}()
+
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -104,56 +149,11 @@ func main() {
 		}
 		defer c.Close()
 
-		for {
-			var buf bytes.Buffer
-			buf.WriteString("<div id=\"sounds\" class=\"flex flex-row flex-wrap justify-center\">")
-			i := 0
-			if len(sounds) == 0 {
-				panic("no sounds found!")
-			}
-			newSoundsStr := ""
-			for _, sound := range sounds {
-				newSoundsStr += sound.Name + ", "
-			}
-			fmt.Printf("new sounds: %v\n", newSoundsStr)
-			for _, sound := range sounds {
-				disabled := sound.UserID != discordClient.userID
-				// if sound.UserID != discordClient.userID {
-				// 	disabled = "disabled"
-				// }
-				buf.WriteString(soundCardComponent(sound.ID, sound.Name, deleteButton(sound.ID, guildID, disabled)))
-				// buf.WriteString(fmt.Sprintf(`<div id="box-%s" class="flex-1 shadow-2xl rounded-md border-2 py-2 px-4 mx-96 mt-2">`, sound.ID))
-				// buf.WriteString(fmt.Sprintf("<div class=\"flex flex-row\">%s<div class=\"flex-1 flex flex-row-reverse\">%s%s</div></div>", soundDetail(sound.Name, sound.ID), deleteButton(sound.ID, guildID, disabled), playButton(sound.ID)))
-				// buf.WriteString("</div>")
-				i++
-			}
-			for i < 8 {
-				buf.WriteString(soundCardComponent("", "", nil))
-				i++
-			}
+		clients[c] = true
+		soundUpdates <- struct{}{}
 
-			// 	plusIcon := `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-			// 	<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-			//   </svg>
-			//   `
-			for _, storedSound := range storedSounds {
-				buf.WriteString(addSoundCardComponent(storedSound, guildID))
-				// buf.WriteString(`<div class="flex-1 shadow-2xl rounded-md border-2 py-2 px-4 mx-96 mt-2">`)
-				// quickplay is disabled until I figure out ratelimiting
-				// qpBtn := fmt.Sprintf(`<button class="flex-1 flex flex-row text-green-500 disabled:text-slate-400" hx-post="/quickplay?soundLocation=%s&guildID=%s" hx-target="#search-results" disabled>Quickplay</button>`, storedSound, guildID)
-				// addBtn := fmt.Sprintf(`<button class="flex-1 flex flex-row text-green-500 disabled:text-slate-400" hx-post="/add-sound?soundLocation=%s&guildID=%s">%s</button>`, storedSound, guildID, plusIcon)
-				// buf.WriteString(fmt.Sprintf("<div class=\"flex flex-row\"><span class=\"flex-1 basis-3/4\">%s</span><div class=\"flex flex-row-reverse\">%s</div></div>", storedSound, addBtn))
-				// buf.WriteString("</div>")
-			}
-			buf.WriteString("</div>")
-			if err := c.WriteMessage(websocket.TextMessage, buf.Bytes()); err != nil {
-				fmt.Fprintf(os.Stderr, "[error] write: %v\n", err)
-				break
-			}
-			fmt.Println("wrote message successfully")
-			<-soundUpdates
-			fmt.Println("found new sound updates!")
-		}
+		waitChan := make(chan struct{})
+		<-waitChan
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
