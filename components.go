@@ -40,6 +40,7 @@ const soundCardComponentTmpl = `
 
             <div class="flex flex-row divide-x divide-gray-700">
                 <button onclick="window._playSound('{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1"><svg class="h-8 w-8 text-gray-500"  width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">  <path stroke="none" d="M0 0h24v24H0z"/>  <rect x="4" y="13" rx="2" width="5" height="7" />  <rect x="15" y="13" rx="2" width="5" height="7" />  <path d="M4 15v-3a8 8 0 0 1 16 0v3" /></svg></button>
+                <button hx-post="/send-sound?soundID={{.soundId}}" hx-swap="none" hx-on:click="window._playSound('{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1"><svg class="h-8 w-8 text-gray-500"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round">  <polygon points="5 3 19 12 5 21 5 3" /></svg></button>
                 {{ if .deleteButton }}
                 {{.deleteButton}}
                 {{ end }}

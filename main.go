@@ -39,6 +39,8 @@ var (
 
 const guildID = "284709094588284929"   // Viznet
 const channelID = "284709094588284930" // general channel
+// const guildID = "752332599631806505" // Faceclub
+// const channelID = "752332599631806509" // general channel
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  20 * 1024,
@@ -118,6 +120,19 @@ func main() {
 			mu.RUnlock()
 		}
 	}()
+	http.HandleFunc("/send-sound", func(w http.ResponseWriter, r *http.Request) {
+		soundID := r.URL.Query().Get("soundID")
+		if soundID == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		err = discordClient.SendSoundboardSound(guildID, channelID, soundID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[error] send soundboard err: %v\n", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
