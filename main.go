@@ -13,6 +13,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -67,6 +68,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	var userIsInChannel atomic.Bool
+	userIsInChannel.Store(false)
 	var mu sync.RWMutex
 	sounds := make([]SoundboardSound, 0)
 	storedSounds := []string{}
@@ -101,11 +104,11 @@ func main() {
 			i := 0
 			for _, sound := range sounds {
 				disabled := sound.UserID != discordClient.userID
-				buf.WriteString(soundCardComponent(sound.ID, sound.Name, deleteButton(sound.ID, guildID, disabled)))
+				buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), deleteButton(sound.ID, guildID, disabled)))
 				i++
 			}
 			for i < 8 {
-				buf.WriteString(soundCardComponent("", "", nil))
+				buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), nil))
 				i++
 			}
 			for _, storedSound := range storedSounds {
@@ -397,6 +400,14 @@ func main() {
 			fetchSoundboardSounds()
 		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" {
 			json.NewEncoder(os.Stdout).Encode(recvMsg)
+			fetchSoundboardSounds()
+		} else if *recvMsg.Type == "VOICE_STATE_UPDATE" {
+			updateUserID := recvMsg.Data.(map[string]any)["user_id"].(string)
+			updateGuildID := recvMsg.Data.(map[string]any)["guild_id"].(string)
+			if updateUserID == discordClient.userID && guildID == updateGuildID {
+				updateChannelID, ok := recvMsg.Data.(map[string]any)["channel_id"].(string)
+				userIsInChannel.Store(ok && updateChannelID == channelID)
+			}
 			fetchSoundboardSounds()
 		}
 	}
