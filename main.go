@@ -37,7 +37,10 @@ var (
 const guildID = "284709094588284929"   // Viznet
 const channelID = "284709094588284930" // general channel
 
-var upgrader = websocket.Upgrader{} // use default options
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  50 * 1024,
+	WriteBufferSize: 50 * 1024,
+} // use default options
 
 func playButton(soundId string) string {
 	playSvg := `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
@@ -67,11 +70,11 @@ func soundDetail(name, id string) string {
 }
 
 func main() {
-	sounds := make([]SoundboardSound, 0)
 	files, err := os.ReadDir("./sounds")
 	if err != nil {
 		panic(err)
 	}
+	sounds := make([]SoundboardSound, 0)
 	storedSounds := []string{}
 	for _, f := range files {
 		if !(strings.HasSuffix(f.Name(), ".ogg") || strings.HasSuffix(f.Name(), ".mp3")) {
@@ -100,10 +103,19 @@ func main() {
 			return
 		}
 		defer c.Close()
+
 		for {
 			var buf bytes.Buffer
 			buf.WriteString("<div id=\"sounds\" class=\"flex flex-row flex-wrap justify-center\">")
 			i := 0
+			if len(sounds) == 0 {
+				panic("no sounds found!")
+			}
+			newSoundsStr := ""
+			for _, sound := range sounds {
+				newSoundsStr += sound.Name + ", "
+			}
+			fmt.Printf("new sounds: %v\n", newSoundsStr)
 			for _, sound := range sounds {
 				disabled := sound.UserID != discordClient.userID
 				// if sound.UserID != discordClient.userID {
@@ -134,12 +146,13 @@ func main() {
 				// buf.WriteString("</div>")
 			}
 			buf.WriteString("</div>")
-			err = c.WriteMessage(websocket.TextMessage, buf.Bytes())
-			if err != nil {
-				log.Println("write:", err)
+			if err := c.WriteMessage(websocket.TextMessage, buf.Bytes()); err != nil {
+				fmt.Fprintf(os.Stderr, "[error] write: %v\n", err)
 				break
 			}
+			fmt.Println("wrote message successfully")
 			<-soundUpdates
+			fmt.Println("found new sound updates!")
 		}
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -353,11 +366,12 @@ func main() {
 		fetchSoundboardSounds := func() {
 			err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":31,"d":{"guild_ids":["`+guildID+`"]}}`))
 			if err != nil {
-				panic(err)
+				fmt.Fprintf(os.Stderr, "[error] fetch soundboard sounds error %v\n", err)
 			}
 		}
 
 		if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
+			// json.NewEncoder(os.Stdout).Encode(recvMsg)
 			newSounds := make([]SoundboardSound, 0)
 			for _, soundboardSound := range recvMsg.Data.(map[string]interface{})["soundboard_sounds"].([]interface{}) {
 				name := soundboardSound.(map[string]interface{})["name"].(string)
@@ -366,10 +380,16 @@ func main() {
 				newSounds = append(newSounds, SoundboardSound{Name: name, ID: id, UserID: userID})
 			}
 			sounds = newSounds
+			newSoundsStr := ""
+			for _, sound := range sounds {
+				newSoundsStr += sound.Name + ", "
+			}
+			fmt.Printf("new sounds: %v\n", newSoundsStr)
 			soundUpdates <- struct{}{}
 		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
 			fetchSoundboardSounds()
 		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" {
+			json.NewEncoder(os.Stdout).Encode(recvMsg)
 			fetchSoundboardSounds()
 		}
 	}
