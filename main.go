@@ -79,6 +79,13 @@ func main() {
 	discordClient := NewDiscordRestClient(authToken, "")
 
 	soundUpdates := make(chan struct{})
+	http.HandleFunc("/component-test", func(w http.ResponseWriter, r *http.Request) {
+		components := ""
+		for i := 0; i < 8; i++ {
+			components += soundCardComponent
+		}
+		w.Write([]byte(components))
+	})
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -288,7 +295,7 @@ func main() {
 	})
 	go func() {
 		fmt.Println("starting http server on localhost:3000...")
-		err := http.ListenAndServe("0.0.0.0:3000", http.DefaultServeMux)
+		err := http.ListenAndServe("localhost:3000", http.DefaultServeMux)
 		if err != nil {
 			panic(err)
 		}

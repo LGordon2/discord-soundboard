@@ -1,4 +1,4 @@
-<html>
+<html class="dark">
 
 <head>
     <meta charset="UTF-8">
@@ -28,16 +28,17 @@
                 playTimeouts[soundId] = timeoutId;
                 audio.play()
             });
-
-            // audio.play();
         }
 
         window._playSound = playSound;
     </script>
-    <div hx-ext="ws" ws-connect="/ws">
+    <!-- <div hx-ext="ws" ws-connect="/ws">
         <div id="sounds"></div>
+    </div> -->
+    <!-- <div id="search-results"></div> -->
+
+    <div class="lg:flex lg:flex-row grid grid-cols-1" hx-get="/component-test" hx-trigger="load">
     </div>
-    <div id="search-results"></div>
 </body>
 
 </html>
