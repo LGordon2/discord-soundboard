@@ -20,10 +20,16 @@
                 if (playTimeouts[soundId]) {
                     clearTimeout(playTimeouts[soundId]);
                 }
+                const classesToAdd = ['border-green-400']
+                const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
 
-                el.classList.add('playing');
+                classesToRemove.forEach(clz => el.classList.remove(clz))
+                classesToAdd.forEach(clz => el.classList.add(clz))
+                // el.classList.add('playing');
                 const timeoutId = setTimeout(() => {
-                    el.classList.remove('playing')
+                    classesToRemove.forEach(clz => el.classList.add(clz))
+                    classesToAdd.forEach(clz => el.classList.remove(clz))
+                    // el.classList.remove('playing')
                 }, audio.duration * 1000)
                 playTimeouts[soundId] = timeoutId;
                 audio.play()
@@ -37,7 +43,11 @@
     </div> -->
     <!-- <div id="search-results"></div> -->
 
-    <div class="lg:flex lg:flex-row grid grid-cols-1" hx-get="/component-test" hx-trigger="load">
+    <div class="divide-y divide-y-4 divide-dashed">
+        <div class="flex flex-row flex-wrap justify-center" hx-get="/component-test" hx-trigger="load">
+        </div>
+        <div class="flex flex-row flex-wrap justify-center" hx-get="/component-test" hx-trigger="load">
+        </div>
     </div>
 </body>
 
