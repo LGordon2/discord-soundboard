@@ -48,15 +48,18 @@ func playButton(soundId string) string {
 }
 
 func deleteButton(soundId, guildId string, disabled bool) string {
+	textColor := "text-rose-400"
 	disabledProp := ""
 	if disabled {
 		disabledProp = "disabled"
+		textColor = "text-gray-400"
 	}
 	minusSvg := `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
 	<path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
   </svg>
   `
-	return fmt.Sprintf(`<button class="text-rose-400 disabled:text-slate-400" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s>%s</button>`, soundId, guildId, disabledProp, minusSvg)
+
+	return fmt.Sprintf(`<button class="flex flex-1 items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s>%s</button>`, textColor, soundId, guildId, disabledProp, minusSvg)
 }
 
 func soundDetail(name, id string) string {
@@ -80,11 +83,15 @@ func main() {
 
 	soundUpdates := make(chan struct{})
 	http.HandleFunc("/component-test", func(w http.ResponseWriter, r *http.Request) {
-		components := ""
-		for i := 0; i < 8; i++ {
-			components += soundCardComponent
-		}
-		w.Write([]byte(components))
+		// components := ""
+		// sounds := [][2]string{
+		// 	{"1210397634343346277", "Wow"},
+		// 	{"1258261093541875723", "ThatsWeird"},
+		// }
+		// for _, sound := range sounds {
+		// 	// components += soundCardComponent(sound[0], sound[1], false)
+		// }
+		// w.Write([]byte(components))
 	})
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
@@ -95,22 +102,21 @@ func main() {
 		defer c.Close()
 		for {
 			var buf bytes.Buffer
-			buf.WriteString("<div id=\"sounds\" class=\"flex flex-col items-stretch items-center\">")
+			buf.WriteString("<div id=\"sounds\" class=\"flex flex-row flex-wrap justify-center\">")
 			i := 0
 			for _, sound := range sounds {
 				disabled := sound.UserID != discordClient.userID
 				// if sound.UserID != discordClient.userID {
 				// 	disabled = "disabled"
 				// }
-				buf.WriteString(fmt.Sprintf(`<div id="box-%s" class="flex-1 shadow-2xl rounded-md border-2 py-2 px-4 mx-96 mt-2">`, sound.ID))
-				buf.WriteString(fmt.Sprintf("<div class=\"flex flex-row\">%s<div class=\"flex-1 flex flex-row-reverse\">%s%s</div></div>", soundDetail(sound.Name, sound.ID), deleteButton(sound.ID, guildID, disabled), playButton(sound.ID)))
-				buf.WriteString("</div>")
+				buf.WriteString(soundCardComponent(sound.ID, sound.Name, deleteButton(sound.ID, guildID, disabled)))
+				// buf.WriteString(fmt.Sprintf(`<div id="box-%s" class="flex-1 shadow-2xl rounded-md border-2 py-2 px-4 mx-96 mt-2">`, sound.ID))
+				// buf.WriteString(fmt.Sprintf("<div class=\"flex flex-row\">%s<div class=\"flex-1 flex flex-row-reverse\">%s%s</div></div>", soundDetail(sound.Name, sound.ID), deleteButton(sound.ID, guildID, disabled), playButton(sound.ID)))
+				// buf.WriteString("</div>")
 				i++
 			}
 			for i < 8 {
-				buf.WriteString(`<div class="flex-1 shadow-2xl rounded-md border-2 py-2 px-4 mx-96 mt-2">`)
-				buf.WriteString(`<span class="text-slate-400">Free</span>`)
-				buf.WriteString("</div>")
+				buf.WriteString(soundCardComponent("", "", nil))
 				i++
 			}
 
