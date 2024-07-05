@@ -102,7 +102,7 @@ func main() {
 			var buf bytes.Buffer
 			buf.WriteString("<div id=\"sounds\" class=\"flex flex-col justify-center items-center\">")
 			i := 0
-			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center\">")
+			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 			for _, sound := range sounds {
 				disabled := sound.UserID != discordClient.userID
 				buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), deleteButton(sound.ID, guildID, disabled)))
