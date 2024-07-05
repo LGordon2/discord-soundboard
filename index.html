@@ -13,6 +13,7 @@
     <script type="text/javascript">
         const playTimeouts = {}
         window._addStats = {}
+        let shouldPlay = true
 
         const playSound = (soundId) => {
             const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
@@ -33,7 +34,7 @@
                     // el.classList.remove('playing')
                 }, audio.duration * 1000)
                 playTimeouts[soundId] = timeoutId;
-                audio.play()
+                shouldPlay && audio.play()
             });
         }
 
@@ -49,14 +50,18 @@
             el.classList.add(`order-[${String(9999 - (window._addStats[soundName] ?? 0))}]`)
         }
 
+        const muteSounds = (ev) => {
+            shouldPlay = !ev.target.checked
+        }
+
         window._updateOrder = updateOrder;
         window._updateStats = updateStats;
         window._playSound = playSound;
+        window._muteSounds = muteSounds;
     </script>
     <div hx-ext="ws" ws-connect="/ws">
         <div id="sounds"></div>
     </div>
-
 </body>
 
 </html>

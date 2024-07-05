@@ -118,6 +118,7 @@ func main() {
 				buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
 			}
 			buf.WriteString("</div>")
+			buf.WriteString(toggleComponent())
 			buf.WriteString("</div>")
 			fmt.Printf("client count: %d\n", len(clients))
 			mu.RLock()
