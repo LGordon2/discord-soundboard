@@ -216,6 +216,7 @@ func main() {
 		}
 		defer c.Close()
 		soundChan := make(chan []byte, 100)
+		fmt.Printf("[%s] connected!\n", c.RemoteAddr())
 
 		mu.Lock()
 		clients[c] = soundChan
