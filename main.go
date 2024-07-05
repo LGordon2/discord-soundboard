@@ -63,20 +63,23 @@ func deleteButton(soundId, guildId string, disabled bool) string {
 	return fmt.Sprintf(`<button class="flex flex-1 items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s>%s</button>`, textColor, soundId, guildId, disabledProp, minusSvg)
 }
 
-func fetchStoredSounds() ([]string, error) {
+func fetchStoredSounds() ([]string, map[string]bool, error) {
 	files, err := os.ReadDir(soundsDir)
 	if err != nil {
 		panic(err)
 	}
 
 	storedSounds := []string{}
+	storedSoundMap := make(map[string]bool) // these won't contain the extension
 	for _, f := range files {
 		if !(strings.HasSuffix(f.Name(), ".ogg") || strings.HasSuffix(f.Name(), ".mp3")) {
 			continue
 		}
 		storedSounds = append(storedSounds, f.Name())
+		nameWithoutExt := strings.Split(f.Name(), ".")[0]
+		storedSoundMap[nameWithoutExt] = true
 	}
-	return storedSounds, nil
+	return storedSounds, storedSoundMap, nil
 }
 
 func main() {
@@ -84,7 +87,7 @@ func main() {
 	userIsInChannel.Store(false)
 	var mu sync.RWMutex
 	sounds := make([]SoundboardSound, 0)
-	storedSounds, err := fetchStoredSounds()
+	storedSounds, storedSoundMap, err := fetchStoredSounds()
 	if err != nil {
 		panic(err)
 	}
@@ -109,18 +112,25 @@ func main() {
 			buf.WriteString("<div id=\"soundsreplace\">")
 			i := 0
 			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+			soundMap := make(map[string]bool)
 			for _, sound := range sounds {
 				disabled := sound.UserID != discordClient.userID
-				buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), deleteButton(sound.ID, guildID, disabled)))
+				_, cannotSave := storedSoundMap[sound.Name]
+				buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
+				soundMap[sound.Name] = true
 				i++
 			}
 			for i < 8 {
-				buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), nil))
+				buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), false, nil))
 				i++
 			}
 			buf.WriteString("</div>")
 			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 			for _, storedSound := range storedSounds {
+				storedSoundNoExt := strings.Split(storedSound, ".")[0]
+				if _, ok := soundMap[storedSoundNoExt]; ok {
+					continue
+				}
 				buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
 			}
 			buf.WriteString("</div>")
@@ -183,8 +193,9 @@ func main() {
 			return
 		}
 
-		if newStoredSounds, err := fetchStoredSounds(); err == nil {
+		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
 			storedSounds = newStoredSounds
+			storedSoundMap = newStoredSoundMap
 			soundUpdates <- struct{}{}
 		}
 

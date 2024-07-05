@@ -29,8 +29,8 @@ const soundCardComponentTmpl = `
                 <h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">{{.soundName}}
                 </h5>
                 <div class="shrink mb-2">
-                    <button class="text-blue-500"
-                        hx-post="/save-sound?soundID={{.soundId}}&soundName={{.soundName}}"><svg class="h-6 w-6"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round">  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />  <polyline points="17 21 17 13 7 13 7 21" />  <polyline points="7 3 7 8 15 8" /></svg>
+                    <button class="enabled:text-blue-500 disabled:text-gray-500"
+                        hx-post="/save-sound?soundID={{.soundId}}&soundName={{.soundName}}" {{if not .canSave}}disabled="true"{{end}}><svg class="h-6 w-6"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round">  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />  <polyline points="17 21 17 13 7 13 7 21" />  <polyline points="7 3 7 8 15 8" /></svg>
                     </button>
                 </div>
                 <a class="shrink text-blue-500 ml-1"
@@ -58,13 +58,14 @@ const soundCardComponentTmpl = `
         </div>
 `
 
-func soundCardComponent(id, name string, canSend bool, deleteButton any) string {
+func soundCardComponent(id, name string, canSend bool, canSave, deleteButton any) string {
 	var buf bytes.Buffer
 	m := map[string]any{
 		"soundId":      id,
 		"soundName":    name,
 		"deleteButton": deleteButton,
 		"canSend":      canSend,
+		"canSave":      canSave,
 		"used":         id != "" && name != "" && deleteButton != nil,
 	}
 	err := template.Must(template.New("soundCardComponentTmpl").Parse(soundCardComponentTmpl)).Execute(&buf, m)
