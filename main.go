@@ -113,7 +113,7 @@ func main() {
 				i++
 			}
 			buf.WriteString("</div>")
-			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center\">")
+			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 			for _, storedSound := range storedSounds {
 				buf.WriteString(addSoundCardComponent(storedSound, guildID))
 			}
