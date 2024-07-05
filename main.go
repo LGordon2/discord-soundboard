@@ -97,7 +97,7 @@ func main() {
 	go func() {
 		for range soundUpdates {
 			var buf bytes.Buffer
-			buf.WriteString("<div id=\"sounds\" class=\"flex flex-col justify-center items-center\">")
+			buf.WriteString("<div id=\"soundsreplace\">")
 			i := 0
 			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 			for _, sound := range sounds {
@@ -115,7 +115,6 @@ func main() {
 				buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
 			}
 			buf.WriteString("</div>")
-			buf.WriteString(toggleComponent())
 			buf.WriteString("</div>")
 			fmt.Printf("client count: %d\n", len(clients))
 			mu.RLock()
