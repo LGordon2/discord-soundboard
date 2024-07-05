@@ -112,36 +112,39 @@ func main() {
 		// w.Write([]byte(components))
 	})
 	clients := make(map[*websocket.Conn]chan []byte)
+	latestSoundUpdate := func() bytes.Buffer {
+		var buf bytes.Buffer
+		buf.WriteString("<div id=\"soundsreplace\">")
+		i := 0
+		buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		soundMap := make(map[string]bool)
+		for _, sound := range sounds {
+			disabled := sound.UserID != discordClient.userID
+			_, cannotSave := storedSoundMap[sound.Name]
+			buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
+			soundMap[sound.Name] = true
+			i++
+		}
+		for i < 8 {
+			buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), false, nil))
+			i++
+		}
+		buf.WriteString("</div>")
+		buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		for _, storedSound := range storedSounds {
+			storedSoundNoExt := strings.Split(storedSound, ".")[0]
+			if _, ok := soundMap[storedSoundNoExt]; ok {
+				continue
+			}
+			buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
+		}
+		buf.WriteString("</div>")
+		buf.WriteString("</div>")
+		return buf
+	}
 	go func() {
 		for range soundUpdates {
-			var buf bytes.Buffer
-			buf.WriteString("<div id=\"soundsreplace\">")
-			i := 0
-			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-			soundMap := make(map[string]bool)
-			for _, sound := range sounds {
-				disabled := sound.UserID != discordClient.userID
-				_, cannotSave := storedSoundMap[sound.Name]
-				buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
-				soundMap[sound.Name] = true
-				i++
-			}
-			for i < 8 {
-				buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), false, nil))
-				i++
-			}
-			buf.WriteString("</div>")
-			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-			for _, storedSound := range storedSounds {
-				storedSoundNoExt := strings.Split(storedSound, ".")[0]
-				if _, ok := soundMap[storedSoundNoExt]; ok {
-					continue
-				}
-				buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
-			}
-			buf.WriteString("</div>")
-			buf.WriteString("</div>")
-			fmt.Printf("client count: %d\n", len(clients))
+			buf := latestSoundUpdate()
 			mu.RLock()
 			for _, c := range clients {
 				c <- buf.Bytes()
@@ -216,10 +219,13 @@ func main() {
 		}
 		defer c.Close()
 		soundChan := make(chan []byte, 100)
+		buf := latestSoundUpdate()
+		soundChan <- buf.Bytes()
 
 		mu.Lock()
 		clients[c] = soundChan
 		mu.Unlock()
+		fmt.Printf("client count: %d\n", len(clients))
 
 		go func() {
 			for sound := range soundChan {
@@ -236,7 +242,6 @@ func main() {
 				}
 			}
 		}()
-		soundUpdates <- struct{}{}
 
 		waitChan := make(chan struct{})
 		<-waitChan
