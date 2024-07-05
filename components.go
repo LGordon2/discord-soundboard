@@ -6,12 +6,12 @@ import (
 )
 
 const addSoundCardComponentTmpl = `
-<div
-        class=" h-12  min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
+    <div hx-on="htmx:afterProcessNode: window._updateOrder(this)" data-soundname="{{ .soundName }}"
+        class="h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
         <div class="flex flex-row">
             <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
             </h5>
-            <button class="flex shrink items-center justify-center" hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}"><svg class="h-8 w-8 text-green-500"
+            <button class="flex shrink items-center justify-center enabled:text-green-500 disabled:text-gray-500" hx-on:click="window._updateStats('{{ .soundName }}')" hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}" {{if .disabled}}disabled="true"{{end}}><svg class="h-8 w-8"
                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -69,11 +69,12 @@ func soundCardComponent(id, name string, canSend bool, deleteButton any) string 
 	return buf.String()
 }
 
-func addSoundCardComponent(storedSound, guildID string) string {
+func addSoundCardComponent(storedSound, guildID string, disabled bool) string {
 	var buf bytes.Buffer
 	m := map[string]any{
 		"soundName": storedSound,
 		"guildID":   guildID,
+		"disabled":  disabled,
 	}
 	err := template.Must(template.New("addSoundCardComponentTmpl").Parse(addSoundCardComponentTmpl)).Execute(&buf, m)
 	if err != nil {

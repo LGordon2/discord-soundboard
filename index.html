@@ -12,6 +12,7 @@
     <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/ws.js"></script>
     <script type="text/javascript">
         const playTimeouts = {}
+        window._addStats = {}
 
         const playSound = (soundId) => {
             const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
@@ -36,6 +37,20 @@
             });
         }
 
+        const updateStats = (soundName) => {
+            if (!window._addStats[soundName]) {
+                window._addStats[soundName] = 0
+            }
+            window._addStats[soundName]++
+        }
+
+        const updateOrder = (el) => {
+            const soundName = el.getAttribute('data-soundname') ?? ''
+            el.classList.add(`order-[${String(9999 - (window._addStats[soundName] ?? 0))}]`)
+        }
+
+        window._updateOrder = updateOrder;
+        window._updateStats = updateStats;
         window._playSound = playSound;
     </script>
     <div hx-ext="ws" ws-connect="/ws">

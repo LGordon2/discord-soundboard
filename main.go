@@ -115,7 +115,7 @@ func main() {
 			buf.WriteString("</div>")
 			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 			for _, storedSound := range storedSounds {
-				buf.WriteString(addSoundCardComponent(storedSound, guildID))
+				buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
 			}
 			buf.WriteString("</div>")
 			buf.WriteString("</div>")
@@ -334,8 +334,9 @@ func main() {
 		w.Write([]byte(fmt.Sprintf("<script type=\"text/javascript\">new Audio('http://localhost:3000/sounds/%s.%s').play();</script>", name, extension)))
 	})
 	go func() {
-		fmt.Println("starting http server on localhost:3000...")
-		err := http.ListenAndServe("0.0.0.0:3000", http.DefaultServeMux)
+		port := "3000"
+		fmt.Printf("starting http server on localhost:%s...\n", port)
+		err := http.ListenAndServe("0.0.0.0:"+port, http.DefaultServeMux)
 		if err != nil {
 			panic(err)
 		}
