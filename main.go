@@ -17,6 +17,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tdewolff/minify"
+	"github.com/tdewolff/minify/html"
+	_ "github.com/tdewolff/minify/v2/html"
 )
 
 type DiscordMessage struct {
@@ -89,6 +92,9 @@ func fetchStoredSounds() ([]string, map[string][]byte, error) {
 }
 
 func main() {
+	m := minify.New()
+	m.AddFunc("text/html", html.Minify)
+
 	var userIsInChannel atomic.Bool
 	userIsInChannel.Store(false)
 	var mu sync.RWMutex
@@ -140,7 +146,9 @@ func main() {
 		}
 		buf.WriteString("</div>")
 		buf.WriteString("</div>")
-		return buf
+		var minifiedBuf bytes.Buffer
+		m.Minify("text/html", &minifiedBuf, &buf)
+		return minifiedBuf
 	}
 	go func() {
 		for range soundUpdates {
