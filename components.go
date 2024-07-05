@@ -23,14 +23,19 @@ const addSoundCardComponentTmpl = `
 
 const soundCardComponentTmpl = `
 <div id="box-{{.soundId}}"
-            class="h-24 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
+            class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
             {{ if .used }}
             <div class="flex flex-row">
-                <h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white">{{.soundName}}
+                <h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">{{.soundName}}
                 </h5>
-                <a class="shrink text-sky-500"
+                <div class="shrink mb-2">
+                    <button class="text-blue-500"
+                        hx-post="/save-sound?soundID={{.soundId}}&soundName={{.soundName}}"><svg class="h-6 w-6"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round">  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />  <polyline points="17 21 17 13 7 13 7 21" />  <polyline points="7 3 7 8 15 8" /></svg>
+                    </button>
+                </div>
+                <a class="shrink text-blue-500 ml-1"
                     href="https://cdn.discordapp.com/soundboard-sounds/{{.soundId}}"><svg
-                        class="h-6 w-6 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="7 10 12 15 17 10" />

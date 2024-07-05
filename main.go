@@ -63,21 +63,30 @@ func deleteButton(soundId, guildId string, disabled bool) string {
 	return fmt.Sprintf(`<button class="flex flex-1 items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s>%s</button>`, textColor, soundId, guildId, disabledProp, minusSvg)
 }
 
-func main() {
-	files, err := os.ReadDir("./sounds")
+func fetchStoredSounds() ([]string, error) {
+	files, err := os.ReadDir(soundsDir)
 	if err != nil {
 		panic(err)
 	}
-	var userIsInChannel atomic.Bool
-	userIsInChannel.Store(false)
-	var mu sync.RWMutex
-	sounds := make([]SoundboardSound, 0)
+
 	storedSounds := []string{}
 	for _, f := range files {
 		if !(strings.HasSuffix(f.Name(), ".ogg") || strings.HasSuffix(f.Name(), ".mp3")) {
 			continue
 		}
 		storedSounds = append(storedSounds, f.Name())
+	}
+	return storedSounds, nil
+}
+
+func main() {
+	var userIsInChannel atomic.Bool
+	userIsInChannel.Store(false)
+	var mu sync.RWMutex
+	sounds := make([]SoundboardSound, 0)
+	storedSounds, err := fetchStoredSounds()
+	if err != nil {
+		panic(err)
 	}
 	discordClient := NewDiscordRestClient(authToken, "")
 
@@ -130,12 +139,56 @@ func main() {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		err = discordClient.SendSoundboardSound(guildID, channelID, soundID)
+		err := discordClient.SendSoundboardSound(guildID, channelID, soundID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[error] send soundboard err: %v\n", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+	})
+	http.HandleFunc("/save-sound", func(w http.ResponseWriter, r *http.Request) {
+		soundID := r.URL.Query().Get("soundID")
+		soundName := r.URL.Query().Get("soundName")
+		if soundID == "" || soundName == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		resp, err := http.DefaultClient.Get("https://cdn.discordapp.com/soundboard-sounds/" + soundID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[error] saving file: %v\n", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		contentType := resp.Header.Get("Content-Type")
+		var extension string
+		switch contentType {
+		case "audio/mpeg3":
+			extension = "mp3"
+		default:
+			extension = "ogg"
+		}
+
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[error] saving file, could not read response body: %v\n", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		err = os.WriteFile(path.Join(soundsDir, soundName+"."+extension), data, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[error] saving file, could not write to disk: %v\n", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		if newStoredSounds, err := fetchStoredSounds(); err == nil {
+			storedSounds = newStoredSounds
+			soundUpdates <- struct{}{}
+		}
+
+		w.WriteHeader(http.StatusOK)
 	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
