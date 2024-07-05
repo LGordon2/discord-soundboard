@@ -38,10 +38,10 @@ var (
 	soundsDir    string // where you store sounds on the server (e.g. /home/user/sounds/...)
 )
 
-// const guildID = "284709094588284929"   // Viznet
-// const channelID = "284709094588284930" // general channel
-const guildID = "752332599631806505"   // Faceclub
-const channelID = "752332599631806509" // general channel
+const guildID = "284709094588284929"   // Viznet
+const channelID = "284709094588284930" // general channel
+// const guildID = "752332599631806505"   // Faceclub
+// const channelID = "752332599631806509" // general channel
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  20 * 1024,
@@ -332,7 +332,7 @@ func main() {
 		w.Write([]byte(fmt.Sprintf("<script type=\"text/javascript\">new Audio('http://localhost:3000/sounds/%s.%s').play();</script>", name, extension)))
 	})
 	go func() {
-		port := "3001"
+		port := "3000"
 		fmt.Printf("starting http server on localhost:%s...\n", port)
 		err := http.ListenAndServe("0.0.0.0:"+port, http.DefaultServeMux)
 		if err != nil {
