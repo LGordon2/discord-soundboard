@@ -100,8 +100,9 @@ func main() {
 				continue
 			}
 			var buf bytes.Buffer
-			buf.WriteString("<div id=\"sounds\" class=\"flex flex-row flex-wrap justify-center\">")
+			buf.WriteString("<div id=\"sounds\" class=\"flex flex-col justify-center items-center\">")
 			i := 0
+			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center\">")
 			for _, sound := range sounds {
 				disabled := sound.UserID != discordClient.userID
 				buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), deleteButton(sound.ID, guildID, disabled)))
@@ -111,9 +112,12 @@ func main() {
 				buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), nil))
 				i++
 			}
+			buf.WriteString("</div>")
+			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center\">")
 			for _, storedSound := range storedSounds {
 				buf.WriteString(addSoundCardComponent(storedSound, guildID))
 			}
+			buf.WriteString("</div>")
 			buf.WriteString("</div>")
 			fmt.Printf("client count: %d\n", len(clients))
 			mu.RLock()
