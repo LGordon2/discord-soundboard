@@ -54,10 +54,15 @@
             shouldPlay = !ev.target.checked
         }
 
+        const setMutedStatus = (el) => {
+            el.checked = !shouldPlay
+        }
+
         window._updateOrder = updateOrder;
         window._updateStats = updateStats;
         window._playSound = playSound;
         window._muteSounds = muteSounds;
+        window._setMutedStatus = setMutedStatus;
     </script>
     <div hx-ext="ws" ws-connect="/ws">
         <div id="sounds"></div>
