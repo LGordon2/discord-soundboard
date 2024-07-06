@@ -17,6 +17,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/tdewolff/minify"
+	"github.com/tdewolff/minify/html"
+	_ "github.com/tdewolff/minify/v2/html"
 )
 
 type DiscordMessage struct {
@@ -63,26 +66,35 @@ func deleteButton(soundId, guildId string, disabled bool) string {
 	return fmt.Sprintf(`<button class="flex flex-1 items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s>%s</button>`, textColor, soundId, guildId, disabledProp, minusSvg)
 }
 
-func fetchStoredSounds() ([]string, map[string]bool, error) {
+func fetchStoredSounds() ([]string, map[string][]byte, error) {
 	files, err := os.ReadDir(soundsDir)
 	if err != nil {
 		panic(err)
 	}
 
 	storedSounds := []string{}
-	storedSoundMap := make(map[string]bool) // these won't contain the extension
+	storedSoundMap := make(map[string][]byte) // these won't contain the extension
 	for _, f := range files {
 		if !(strings.HasSuffix(f.Name(), ".ogg") || strings.HasSuffix(f.Name(), ".mp3")) {
 			continue
 		}
 		storedSounds = append(storedSounds, f.Name())
 		nameWithoutExt := strings.Split(f.Name(), ".")[0]
-		storedSoundMap[nameWithoutExt] = true
+		data, err := os.ReadFile(path.Join(soundsDir, f.Name()))
+		if err == nil {
+			storedSoundMap[nameWithoutExt] = data
+		} else {
+			storedSoundMap[nameWithoutExt] = []byte{}
+			fmt.Printf("[warn] couldn't prefetch file %s\n", f.Name())
+		}
 	}
 	return storedSounds, storedSoundMap, nil
 }
 
 func main() {
+	m := minify.New()
+	m.AddFunc("text/html", html.Minify)
+
 	var userIsInChannel atomic.Bool
 	userIsInChannel.Store(false)
 	var mu sync.RWMutex
@@ -106,36 +118,41 @@ func main() {
 		// w.Write([]byte(components))
 	})
 	clients := make(map[*websocket.Conn]chan []byte)
+	latestSoundUpdate := func() bytes.Buffer {
+		var buf bytes.Buffer
+		buf.WriteString("<div id=\"soundsreplace\">")
+		i := 0
+		buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		soundMap := make(map[string]bool)
+		for _, sound := range sounds {
+			disabled := sound.UserID != discordClient.userID
+			_, cannotSave := storedSoundMap[sound.Name]
+			buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
+			soundMap[sound.Name] = true
+			i++
+		}
+		for i < 8 {
+			buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), false, nil))
+			i++
+		}
+		buf.WriteString("</div>")
+		buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		for _, storedSound := range storedSounds {
+			storedSoundNoExt := strings.Split(storedSound, ".")[0]
+			if _, ok := soundMap[storedSoundNoExt]; ok {
+				continue
+			}
+			buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
+		}
+		buf.WriteString("</div>")
+		buf.WriteString("</div>")
+		var minifiedBuf bytes.Buffer
+		m.Minify("text/html", &minifiedBuf, &buf)
+		return minifiedBuf
+	}
 	go func() {
 		for range soundUpdates {
-			var buf bytes.Buffer
-			buf.WriteString("<div id=\"soundsreplace\">")
-			i := 0
-			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-			soundMap := make(map[string]bool)
-			for _, sound := range sounds {
-				disabled := sound.UserID != discordClient.userID
-				_, cannotSave := storedSoundMap[sound.Name]
-				buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
-				soundMap[sound.Name] = true
-				i++
-			}
-			for i < 8 {
-				buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), false, nil))
-				i++
-			}
-			buf.WriteString("</div>")
-			buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-			for _, storedSound := range storedSounds {
-				storedSoundNoExt := strings.Split(storedSound, ".")[0]
-				if _, ok := soundMap[storedSoundNoExt]; ok {
-					continue
-				}
-				buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
-			}
-			buf.WriteString("</div>")
-			buf.WriteString("</div>")
-			fmt.Printf("client count: %d\n", len(clients))
+			buf := latestSoundUpdate()
 			mu.RLock()
 			for _, c := range clients {
 				c <- buf.Bytes()
@@ -210,10 +227,13 @@ func main() {
 		}
 		defer c.Close()
 		soundChan := make(chan []byte, 100)
+		buf := latestSoundUpdate()
+		soundChan <- buf.Bytes()
 
 		mu.Lock()
 		clients[c] = soundChan
 		mu.Unlock()
+		fmt.Printf("client count: %d\n", len(clients))
 
 		go func() {
 			for sound := range soundChan {
@@ -230,7 +250,6 @@ func main() {
 				}
 			}
 		}()
-		soundUpdates <- struct{}{}
 
 		waitChan := make(chan struct{})
 		<-waitChan
@@ -290,11 +309,18 @@ func main() {
 	}))
 	http.HandleFunc("/add-sound", func(w http.ResponseWriter, r *http.Request) {
 		soundLocation := r.URL.Query().Get("soundLocation")
-		data, err := os.ReadFile(path.Join(soundsDir, soundLocation))
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "[error] trouble reading file %s", soundLocation)
-			return
+		nameWithoutExt := strings.Split(soundLocation, ".")[0]
+		var data []byte
+		if soundData, ok := storedSoundMap[nameWithoutExt]; ok {
+			data = soundData
+		} else {
+			fileData, err := os.ReadFile(path.Join(soundsDir, soundLocation))
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "[error] trouble reading file %s", soundLocation)
+				return
+			}
+			data = fileData
 		}
 
 		arr := strings.Split(soundLocation, "/")
