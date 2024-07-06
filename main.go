@@ -172,6 +172,12 @@ func main() {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+
+		mu.RLock()
+		for _, clientChan := range clients {
+			clientChan <- []byte("<div id=\"playsound\"><script>window._playSound('" + soundID + "', true)</script></div>")
+		}
+		mu.RUnlock()
 	})
 	http.HandleFunc("/save-sound", func(w http.ResponseWriter, r *http.Request) {
 		soundID := r.URL.Query().Get("soundID")
