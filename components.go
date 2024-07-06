@@ -34,7 +34,7 @@ const soundCardComponentTmpl = `
                     </button>
                 </div>
                 <a class="shrink text-blue-500 ml-1"
-                    href="https://cdn.discordapp.com/soundboard-sounds/{{.soundId}}"><svg
+                    href="https://cdn.discordapp.com/soundboard-sounds/{{.soundId}}" hx-on="htmx:beforeProcessNode: new Audio(this.href)"><svg
                         class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
