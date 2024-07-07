@@ -58,12 +58,8 @@ func deleteButton(soundId, guildId string, disabled bool) string {
 		disabledProp = "disabled"
 		textColor = "text-gray-400"
 	}
-	minusSvg := `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-	<path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
-  </svg>
-  `
 
-	return fmt.Sprintf(`<button class="flex flex-1 items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s>%s</button>`, textColor, soundId, guildId, disabledProp, minusSvg)
+	return fmt.Sprintf(`<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'minus')" class="flex flex-1 items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s></button>`, textColor, soundId, guildId, disabledProp)
 }
 
 func fetchStoredSounds() ([]string, map[string][]byte, error) {
@@ -212,10 +208,25 @@ func main() {
 			return
 		}
 
+		soundboardSound := SoundboardSoundWithOrdinal{}
+		for i, sound := range sounds {
+			if sound.ID == soundID {
+				soundboardSound = SoundboardSoundWithOrdinal{
+					ordinal:         i,
+					SoundboardSound: sound,
+				}
+				break
+			}
+		}
+
 		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
 			storedSounds = newStoredSounds
 			storedSoundMap = newStoredSoundMap
-			soundUpdates <- nil
+			if soundboardSound != (SoundboardSoundWithOrdinal{}) {
+				soundUpdates <- []SoundboardSoundWithOrdinal{
+					soundboardSound,
+				}
+			}
 		}
 
 		w.WriteHeader(http.StatusOK)
