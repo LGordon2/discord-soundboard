@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"strings"
 	"text/template"
 )
 
@@ -64,7 +64,7 @@ const soundCardComponentTmplRaw = `
 `
 
 func soundCardComponent(i int, id, name string, canSend bool, canSave, deleteButton any) string {
-	var buf bytes.Buffer
+	var builder strings.Builder
 	m := map[string]any{
 		"ordinal":      i,
 		"soundId":      id,
@@ -74,25 +74,25 @@ func soundCardComponent(i int, id, name string, canSend bool, canSave, deleteBut
 		"canSave":      canSave,
 		"used":         id != "" && name != "" && deleteButton != nil,
 	}
-	err := soundCardComponentTmpl.Execute(&buf, m)
+	err := soundCardComponentTmpl.Execute(&builder, m)
 	if err != nil {
 		panic(err)
 	}
-	return buf.String()
+	return builder.String()
 }
 
 func addSoundCardComponent(storedSound, guildID string, disabled bool) string {
-	var buf bytes.Buffer
+	var builder strings.Builder
 	m := map[string]any{
 		"soundName": storedSound,
 		"guildID":   guildID,
 		"disabled":  disabled,
 	}
-	err := addSoundCardComponentTmpl.Execute(&buf, m)
+	err := addSoundCardComponentTmpl.Execute(&builder, m)
 	if err != nil {
 		panic(err)
 	}
-	return buf.String()
+	return builder.String()
 }
 
 func init() {
