@@ -98,7 +98,7 @@ func main() {
 	var userIsInChannel atomic.Bool
 	userIsInChannel.Store(false)
 	var mu sync.RWMutex
-	sounds := make([]SoundboardSound, 0)
+	sounds := [8]SoundboardSound{}
 	storedSounds, storedSoundMap, err := fetchStoredSounds()
 	if err != nil {
 		panic(err)
@@ -121,19 +121,19 @@ func main() {
 	latestSoundUpdate := func() bytes.Buffer {
 		var buf bytes.Buffer
 		buf.WriteString("<div id=\"soundsreplace\">")
-		i := 0
 		buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		soundMap := make(map[string]bool)
+		hasEmpty := false
 		for _, sound := range sounds {
+			if sound == (SoundboardSound{}) {
+				buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), false, nil))
+				hasEmpty = true
+				continue
+			}
 			disabled := sound.UserID != discordClient.userID
 			_, cannotSave := storedSoundMap[sound.Name]
 			buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
 			soundMap[sound.Name] = true
-			i++
-		}
-		for i < 8 {
-			buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), false, nil))
-			i++
 		}
 		buf.WriteString("</div>")
 		buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
@@ -142,7 +142,7 @@ func main() {
 			if _, ok := soundMap[storedSoundNoExt]; ok {
 				continue
 			}
-			buf.WriteString(addSoundCardComponent(storedSound, guildID, len(sounds) == 8))
+			buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty))
 		}
 		buf.WriteString("</div>")
 		buf.WriteString("</div>")
@@ -485,16 +485,39 @@ func main() {
 		}
 
 		if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
-			newSounds := make([]SoundboardSound, 0)
+			newSounds := [8]SoundboardSound{}
+
+			emptyPositions := []int{}
+			soundMap := make(map[string]int)
+			for i, sound := range sounds {
+				if sound == (SoundboardSound{}) {
+					emptyPositions = append(emptyPositions, i)
+				} else {
+					soundMap[sound.ID] = i
+				}
+			}
+
 			for _, soundboardSound := range recvMsg.Data.(map[string]interface{})["soundboard_sounds"].([]interface{}) {
-				name := soundboardSound.(map[string]interface{})["name"].(string)
 				id := soundboardSound.(map[string]interface{})["sound_id"].(string)
+				name := soundboardSound.(map[string]interface{})["name"].(string)
 				userID := soundboardSound.(map[string]interface{})["user_id"].(string)
-				newSounds = append(newSounds, SoundboardSound{Name: name, ID: id, UserID: userID})
+				newSound := SoundboardSound{Name: name, ID: id, UserID: userID}
+
+				// check if new sound is in sounds, if so place in same spot
+				if pos, ok := soundMap[newSound.ID]; ok { // sound was already present
+					newSounds[pos] = newSound
+				} else { // otherwise place in first available spot
+					if len(emptyPositions) > 0 {
+						emptyPos := emptyPositions[0]
+						emptyPositions = emptyPositions[1:]
+						newSounds[emptyPos] = newSound
+					}
+				}
 			}
 			sounds = newSounds
 			soundUpdates <- struct{}{}
 		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
+			json.NewEncoder(os.Stdout).Encode(recvMsg)
 			fetchSoundboardSounds()
 		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" {
 			json.NewEncoder(os.Stdout).Encode(recvMsg)
