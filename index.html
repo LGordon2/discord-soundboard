@@ -17,14 +17,25 @@
         let shouldPlay = true
         let shouldPlaySendSounds = false
 
+        /**
+         *    Mute sounds | Play send sounds | IsSendSound? || Sound played?
+         * 1.     F       |  F               | F            || T
+         * 2.     F       |  F               | T            || F
+         * 3.     F       |  T               | F            || F
+         * 4.     F       |  T               | T            || T
+         * 5.     T       |  x               | x            || F
+         * 
+         * The second parameter indicates that the sound was sent through the websocket.
+         */
         const playSound = (soundId, sent) => {
+            sent = sent === undefined ? false : sent
             const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
             const el = document.querySelector('#box-' + soundId)
             audio.addEventListener("loadeddata", () => {
-                if (playTimeouts[soundId]) {
-                    clearTimeout(playTimeouts[soundId]);
-                }
                 if (!sent) {
+                    if (playTimeouts[soundId]) {
+                        clearTimeout(playTimeouts[soundId]);
+                    }
                     const classesToAdd = ['border-green-400']
                     const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
 
@@ -36,7 +47,11 @@
                     }, audio.duration * 1000)
                     playTimeouts[soundId] = timeoutId;
                 }
-                shouldPlay && audio.play()
+                if (shouldPlay) {
+                    if (sent === shouldPlaySendSounds) {
+                        audio.play()
+                    }
+                }
             });
         }
 
