@@ -1,8 +1,7 @@
 TODO
 ====
 
-- ~Retain removed location~
-- Sound owner tooltip
-- Only replace as need be
+- Show who owns the file on hover for the minus sign.
 - Proper auth?
 - Go WASM for frontend?
+- Make dark mode actually dark mode
