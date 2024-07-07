@@ -111,22 +111,12 @@ func main() {
 	discordClient := NewDiscordRestClient(authToken, "")
 
 	soundUpdates := make(chan []SoundboardSoundWithOrdinal)
-	http.HandleFunc("/component-test", func(w http.ResponseWriter, r *http.Request) {
-		// components := ""
-		// sounds := [][2]string{
-		// 	{"1210397634343346277", "Wow"},
-		// 	{"1258261093541875723", "ThatsWeird"},
-		// }
-		// for _, sound := range sounds {
-		// 	// components += soundCardComponent(sound[0], sound[1], false)
-		// }
-		// w.Write([]byte(components))
-	})
 	clients := make(map[*websocket.Conn]chan []byte)
 	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
 		var buf bytes.Buffer
 		soundMap := make(map[string]bool)
 		hasEmpty := false
+		// This is used later to prune sounds that can be added or disables adding new sounds.
 		for _, sound := range sounds {
 			if sound == (SoundboardSound{}) {
 				hasEmpty = true
