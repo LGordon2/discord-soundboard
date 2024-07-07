@@ -5,7 +5,12 @@ import (
 	"text/template"
 )
 
-const addSoundCardComponentTmpl = `
+var (
+	addSoundCardComponentTmpl *template.Template
+	soundCardComponentTmpl    *template.Template
+)
+
+const addSoundCardComponentTmplRaw = `
     <div hx-on="htmx:afterProcessNode: window._updateOrder(this)" data-soundname="{{ .soundName }}"
         class="h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
         <div class="flex flex-row">
@@ -21,7 +26,7 @@ const addSoundCardComponentTmpl = `
     </div>
 `
 
-const soundCardComponentTmpl = `
+const soundCardComponentTmplRaw = `
 <div id="soundboard-{{.ordinal}}"
             class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
             {{ if .used }}
@@ -69,7 +74,7 @@ func soundCardComponent(i int, id, name string, canSend bool, canSave, deleteBut
 		"canSave":      canSave,
 		"used":         id != "" && name != "" && deleteButton != nil,
 	}
-	err := template.Must(template.New("soundCardComponentTmpl").Parse(soundCardComponentTmpl)).Execute(&buf, m)
+	err := soundCardComponentTmpl.Execute(&buf, m)
 	if err != nil {
 		panic(err)
 	}
@@ -83,9 +88,14 @@ func addSoundCardComponent(storedSound, guildID string, disabled bool) string {
 		"guildID":   guildID,
 		"disabled":  disabled,
 	}
-	err := template.Must(template.New("addSoundCardComponentTmpl").Parse(addSoundCardComponentTmpl)).Execute(&buf, m)
+	err := addSoundCardComponentTmpl.Execute(&buf, m)
 	if err != nil {
 		panic(err)
 	}
 	return buf.String()
+}
+
+func init() {
+	addSoundCardComponentTmpl = template.Must(template.New("addSoundCardComponentTmpl").Parse(addSoundCardComponentTmplRaw))
+	soundCardComponentTmpl = template.Must(template.New("soundCardComponentTmpl").Parse(soundCardComponentTmplRaw))
 }
