@@ -91,6 +91,11 @@ func fetchStoredSounds() ([]string, map[string][]byte, error) {
 	return storedSounds, storedSoundMap, nil
 }
 
+type SoundboardSoundWithOrdinal struct {
+	SoundboardSound
+	ordinal int
+}
+
 func main() {
 	m := minify.New()
 	m.AddFunc("text/html", html.Minify)
@@ -105,7 +110,7 @@ func main() {
 	}
 	discordClient := NewDiscordRestClient(authToken, "")
 
-	soundUpdates := make(chan struct{})
+	soundUpdates := make(chan []SoundboardSoundWithOrdinal)
 	http.HandleFunc("/component-test", func(w http.ResponseWriter, r *http.Request) {
 		// components := ""
 		// sounds := [][2]string{
@@ -118,25 +123,27 @@ func main() {
 		// w.Write([]byte(components))
 	})
 	clients := make(map[*websocket.Conn]chan []byte)
-	latestSoundUpdate := func() bytes.Buffer {
+	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
 		var buf bytes.Buffer
-		buf.WriteString("<div id=\"soundsreplace\">")
-		buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		soundMap := make(map[string]bool)
 		hasEmpty := false
 		for _, sound := range sounds {
 			if sound == (SoundboardSound{}) {
-				buf.WriteString(soundCardComponent("", "", userIsInChannel.Load(), false, nil))
 				hasEmpty = true
 				continue
 			}
-			disabled := sound.UserID != discordClient.userID
-			_, cannotSave := storedSoundMap[sound.Name]
-			buf.WriteString(soundCardComponent(sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
 			soundMap[sound.Name] = true
 		}
-		buf.WriteString("</div>")
-		buf.WriteString("<div class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		// write updates for new sounds
+		for _, sound := range newSounds {
+			if sound.SoundboardSound == (SoundboardSound{}) {
+				buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, nil))
+			}
+			disabled := sound.UserID != discordClient.userID
+			_, cannotSave := storedSoundMap[sound.Name]
+			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
+		}
+		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		for _, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
 			if _, ok := soundMap[storedSoundNoExt]; ok {
@@ -145,14 +152,13 @@ func main() {
 			buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty))
 		}
 		buf.WriteString("</div>")
-		buf.WriteString("</div>")
 		var minifiedBuf bytes.Buffer
 		m.Minify("text/html", &minifiedBuf, &buf)
 		return minifiedBuf
 	}
 	go func() {
-		for range soundUpdates {
-			buf := latestSoundUpdate()
+		for newSounds := range soundUpdates {
+			buf := latestSoundUpdate(newSounds)
 			mu.RLock()
 			for _, c := range clients {
 				c <- buf.Bytes()
@@ -175,7 +181,7 @@ func main() {
 
 		mu.RLock()
 		for _, clientChan := range clients {
-			clientChan <- []byte("<div id=\"playsound\"><script>window._playSound('" + soundID + "', true)</script></div>")
+			clientChan <- []byte("<div id=\"playsound\"><script>window._playSound(null, '" + soundID + "', true)</script></div>")
 		}
 		mu.RUnlock()
 	})
@@ -219,7 +225,7 @@ func main() {
 		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
 			storedSounds = newStoredSounds
 			storedSoundMap = newStoredSoundMap
-			soundUpdates <- struct{}{}
+			soundUpdates <- nil
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -233,7 +239,15 @@ func main() {
 		}
 		defer c.Close()
 		soundChan := make(chan []byte, 100)
-		buf := latestSoundUpdate()
+		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
+		for i, sound := range sounds {
+			soundsWithOrdinal = append(soundsWithOrdinal, SoundboardSoundWithOrdinal{
+				ordinal:         i,
+				SoundboardSound: sound,
+			})
+		}
+
+		buf := latestSoundUpdate(soundsWithOrdinal)
 		soundChan <- buf.Bytes()
 
 		mu.Lock()
@@ -497,6 +511,7 @@ func main() {
 				}
 			}
 
+			newUpdates := []SoundboardSoundWithOrdinal{}
 			for _, soundboardSound := range recvMsg.Data.(map[string]interface{})["soundboard_sounds"].([]interface{}) {
 				id := soundboardSound.(map[string]interface{})["sound_id"].(string)
 				name := soundboardSound.(map[string]interface{})["name"].(string)
@@ -511,11 +526,24 @@ func main() {
 						emptyPos := emptyPositions[0]
 						emptyPositions = emptyPositions[1:]
 						newSounds[emptyPos] = newSound
+						// send updates for any sounds added
+						newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
+							ordinal:         emptyPos,
+							SoundboardSound: newSound,
+						})
 					}
 				}
 			}
+			// send updates for any sounds removed
+			for i, newSound := range newSounds {
+				if newSound == (SoundboardSound{}) {
+					newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
+						ordinal: i,
+					})
+				}
+			}
 			sounds = newSounds
-			soundUpdates <- struct{}{}
+			soundUpdates <- newUpdates
 		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
 			json.NewEncoder(os.Stdout).Encode(recvMsg)
 			fetchSoundboardSounds()
@@ -529,7 +557,15 @@ func main() {
 				updateChannelID, ok := recvMsg.Data.(map[string]any)["channel_id"].(string)
 				userIsInChannel.Store(ok && updateChannelID == channelID)
 			}
-			fetchSoundboardSounds()
+			// just force updates on all the sounds!
+			updates := make([]SoundboardSoundWithOrdinal, 0)
+			for i, sound := range sounds {
+				updates = append(updates, SoundboardSoundWithOrdinal{
+					ordinal:         i,
+					SoundboardSound: sound,
+				})
+			}
+			soundUpdates <- updates
 		}
 	}
 }

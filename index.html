@@ -27,12 +27,15 @@
          * 
          * The second parameter indicates that the sound was sent through the websocket.
          */
-        const playSound = (soundId, sent) => {
+        const playSound = (elId, soundId, sent) => {
             sent = sent === undefined ? false : sent
             const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
-            const el = document.querySelector('#box-' + soundId)
+            let el = undefined;
+            if (elId) {
+                el = document.querySelector('#' + elId)
+            }
             audio.addEventListener("loadeddata", () => {
-                if (!sent) {
+                if (el) {
                     if (playTimeouts[soundId]) {
                         clearTimeout(playTimeouts[soundId]);
                     }
@@ -95,7 +98,17 @@
     </script>
     <div hx-ext="ws" ws-connect="/ws">
         <div id="sounds" class="flex flex-col justify-center items-center">
-            <div id="soundsreplace"></div>
+            <div class="flex flex-1 flex-wrap justify-center items-center max-w-7xl">
+                <div id="soundboard-0"></div>
+                <div id="soundboard-1"></div>
+                <div id="soundboard-2"></div>
+                <div id="soundboard-3"></div>
+                <div id="soundboard-4"></div>
+                <div id="soundboard-5"></div>
+                <div id="soundboard-6"></div>
+                <div id="soundboard-7"></div>
+            </div>
+            <div id="storedsounds"></div>
             <div class="flex flex-row">
                 <div>
                     <label class="inline-flex items-center cursor-pointer">

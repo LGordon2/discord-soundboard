@@ -22,7 +22,7 @@ const addSoundCardComponentTmpl = `
 `
 
 const soundCardComponentTmpl = `
-<div id="box-{{.soundId}}"
+<div id="soundboard-{{.ordinal}}"
             class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
             {{ if .used }}
             <div class="flex flex-row">
@@ -44,8 +44,8 @@ const soundCardComponentTmpl = `
             </div>
 
             <div class="flex flex-row divide-x divide-gray-700">
-                <button onclick="window._playSound('{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1"><svg class="h-8 w-8 text-yellow-500"  width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">  <path stroke="none" d="M0 0h24v24H0z"/>  <rect x="4" y="13" rx="2" width="5" height="7" />  <rect x="15" y="13" rx="2" width="5" height="7" />  <path d="M4 15v-3a8 8 0 0 1 16 0v3" /></svg></button>
-                <button hx-post="/send-sound?soundID={{.soundId}}" hx-swap="none" hx-on:click="window._playSound('{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500" {{if not .canSend}}disabled="true"{{end}}><svg class="h-8 w-8"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round">  <polygon points="5 3 19 12 5 21 5 3" /></svg></button>
+                <button hx-on:click="window._playSound('soundboard-{{.ordinal}}', '{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1"><svg class="h-8 w-8 text-yellow-500"  width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">  <path stroke="none" d="M0 0h24v24H0z"/>  <rect x="4" y="13" rx="2" width="5" height="7" />  <rect x="15" y="13" rx="2" width="5" height="7" />  <path d="M4 15v-3a8 8 0 0 1 16 0v3" /></svg></button>
+                <button hx-post="/send-sound?soundID={{.soundId}}" hx-swap="none" hx-on:click="window._playSound('soundboard-{{.ordinal}}', '{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500" {{if not .canSend}}disabled="true"{{end}}><svg class="h-8 w-8"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round">  <polygon points="5 3 19 12 5 21 5 3" /></svg></button>
                 {{ if .deleteButton }}
                 {{.deleteButton}}
                 {{ end }}
@@ -58,9 +58,10 @@ const soundCardComponentTmpl = `
         </div>
 `
 
-func soundCardComponent(id, name string, canSend bool, canSave, deleteButton any) string {
+func soundCardComponent(i int, id, name string, canSend bool, canSave, deleteButton any) string {
 	var buf bytes.Buffer
 	m := map[string]any{
+		"ordinal":      i,
 		"soundId":      id,
 		"soundName":    name,
 		"deleteButton": deleteButton,
