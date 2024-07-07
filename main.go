@@ -237,6 +237,20 @@ func main() {
 			})
 		}
 
+		waitChan := make(chan struct{})
+		go func() {
+			for sound := range soundChan {
+				c.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := c.WriteMessage(websocket.TextMessage, []byte(sound)); err != nil {
+					opErr := &net.OpError{}
+					if errors.Is(err, websocket.ErrCloseSent) || errors.As(err, &opErr) {
+						break
+					}
+					fmt.Fprintf(os.Stderr, "[error] write: %v %T\n", err, err)
+				}
+			}
+			waitChan <- struct{}{}
+		}()
 		buf := latestSoundUpdate(soundsWithOrdinal)
 		soundChan <- buf.Bytes()
 
@@ -245,24 +259,11 @@ func main() {
 		mu.Unlock()
 		fmt.Printf("client count: %d\n", len(clients))
 
-		go func() {
-			for sound := range soundChan {
-				c.SetWriteDeadline(time.Now().Add(10 * time.Second))
-				if err := c.WriteMessage(websocket.TextMessage, []byte(sound)); err != nil {
-					opErr := &net.OpError{}
-					if errors.Is(err, websocket.ErrCloseSent) || errors.As(err, &opErr) {
-						mu.Lock()
-						delete(clients, c)
-						mu.Unlock()
-						return
-					}
-					fmt.Fprintf(os.Stderr, "[error] write: %v %T\n", err, err)
-				}
-			}
-		}()
-
-		waitChan := make(chan struct{})
 		<-waitChan
+
+		mu.Lock()
+		delete(clients, c)
+		mu.Unlock()
 		close(soundChan)
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
