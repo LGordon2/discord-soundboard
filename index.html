@@ -28,13 +28,11 @@
                     const classesToAdd = ['border-green-400']
                     const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
 
-                    classesToRemove.forEach(clz => el.classList.remove(clz))
-                    classesToAdd.forEach(clz => el.classList.add(clz))
-                    // el.classList.add('playing');
+                    el.classList.add(...classesToAdd)
+                    el.classList.remove(...classesToRemove)
                     const timeoutId = setTimeout(() => {
-                        classesToRemove.forEach(clz => el.classList.add(clz))
-                        classesToAdd.forEach(clz => el.classList.remove(clz))
-                        // el.classList.remove('playing')
+                        el.classList.add(...classesToRemove)
+                        el.classList.remove(...classesToAdd)
                     }, audio.duration * 1000)
                     playTimeouts[soundId] = timeoutId;
                 }
