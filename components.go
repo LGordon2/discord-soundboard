@@ -10,6 +10,23 @@ var (
 	soundCardComponentTmpl    *template.Template
 )
 
+const uploadedByComponentTmplRaw = `
+    <div class="invisible peer-hover:visible hover:visible" style="position: absolute; transform: translate(54px, 26px)">
+        <div
+            class="max-h-24 max-w-72 p-2 m-2 rounded-lg shadow bg-gray-700 flex flex-row text-sm font-medium text-gray-900 dark:text-white truncate">
+            <span class="flex items-center mr-4">Uploaded by</span>
+            <img class="rounded-full w-8 h-8"
+                src="{{.avatarCDN}}?size=32">
+            <span class="flex items-center ml-1 truncate">{{.username}}</span>
+
+        </div>
+        <svg style="transform: translateY(-64px) translateX(164px)" class="text-gray-700" width="10"
+            height="10" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="5,1.5 9,8.5 1,8.5" fill="currentColor" stroke-width="2" />
+        </svg>
+    </div>
+`
+
 const addSoundCardComponentTmplRaw = `
     <div hx-on="htmx:afterProcessNode: window._updateOrder(this)" data-soundname="{{ .soundName }}"
         class="h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
@@ -78,6 +95,19 @@ func addSoundCardComponent(storedSound, guildID string, disabled bool) string {
 		"disabled":  disabled,
 	}
 	err := addSoundCardComponentTmpl.Execute(&builder, m)
+	if err != nil {
+		panic(err)
+	}
+	return builder.String()
+}
+
+func uploadedByComponent(username, avatarCDN string) string {
+	var builder strings.Builder
+	m := map[string]any{
+		"username":  username,
+		"avatarCDN": avatarCDN,
+	}
+	err := template.Must(template.New("uploadedByComponentTmpl").Parse(uploadedByComponentTmplRaw)).Execute(&builder, m)
 	if err != nil {
 		panic(err)
 	}

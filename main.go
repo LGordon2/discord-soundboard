@@ -32,6 +32,7 @@ type SoundboardSound struct {
 	Name   string
 	ID     string
 	UserID string
+	Avatar string
 }
 
 var (
@@ -51,15 +52,17 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 20 * 1024,
 } // use default options
 
-func deleteButton(soundId, guildId string, disabled bool) string {
+func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) string {
 	textColor := "text-rose-400"
 	disabledProp := ""
+	hiddenTooltip := ""
 	if disabled {
 		disabledProp = "disabled"
 		textColor = "text-gray-400"
+		hiddenTooltip = uploadedByComponent(username, avatarCDN)
 	}
 
-	return fmt.Sprintf(`<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'minus')" class="flex flex-1 items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s></button>`, textColor, soundId, guildId, disabledProp)
+	return fmt.Sprintf(`<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'minus')" class="flex flex-1 peer items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s></button>%s`, textColor, soundId, guildId, disabledProp, hiddenTooltip)
 }
 
 func fetchStoredSounds() ([]string, map[string][]byte, error) {
@@ -92,7 +95,15 @@ type SoundboardSoundWithOrdinal struct {
 	ordinal int
 }
 
+type UserInfo struct {
+	UserID   string
+	Username string
+	Avatar   string
+}
+
 func main() {
+	userInfoCache := make(map[string]UserInfo)
+
 	m := minify.New()
 	m.AddFunc("text/html", html.Minify)
 
@@ -127,7 +138,9 @@ func main() {
 			}
 			disabled := sound.UserID != discordClient.userID
 			_, cannotSave := storedSoundMap[sound.Name]
-			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, disabled)))
+			userInfo := userInfoCache[sound.UserID]
+			avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
+			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
 		}
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		for _, storedSound := range storedSounds {
@@ -500,7 +513,19 @@ func main() {
 			}
 		}
 
-		if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
+		if *recvMsg.Type == "READY" {
+			for _, user := range recvMsg.Data.(map[string]interface{})["users"].([]interface{}) {
+				userID := user.(map[string]interface{})["id"].(string)
+				username := user.(map[string]interface{})["username"].(string)
+				if avatar, ok := user.(map[string]interface{})["avatar"].(string); ok {
+					userInfoCache[userID] = UserInfo{
+						UserID:   userID,
+						Avatar:   avatar,
+						Username: username,
+					}
+				}
+			}
+		} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
 			newSounds := [8]SoundboardSound{}
 
 			emptyPositions := []int{}
@@ -518,7 +543,14 @@ func main() {
 				id := soundboardSound.(map[string]interface{})["sound_id"].(string)
 				name := soundboardSound.(map[string]interface{})["name"].(string)
 				userID := soundboardSound.(map[string]interface{})["user_id"].(string)
-				newSound := SoundboardSound{Name: name, ID: id, UserID: userID}
+				var avatar string
+				if userInfo, ok := soundboardSound.(map[string]interface{})["user"].(map[string]interface{}); ok {
+					avatar = userInfo["avatar"].(string)
+					old := userInfoCache[userID]
+					old.Avatar = avatar
+					userInfoCache[userID] = old
+				}
+				newSound := SoundboardSound{Name: name, ID: id, UserID: userID, Avatar: avatar}
 
 				// check if new sound is in sounds, if so place in same spot
 				if pos, ok := soundMap[newSound.ID]; ok { // sound was already present
