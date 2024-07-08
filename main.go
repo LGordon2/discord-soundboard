@@ -178,9 +178,10 @@ func main() {
 			return
 		}
 
+		playSoundPayload := []byte("<div id=\"playsound\"><script>window._playSound(null, '" + soundID + "', true)</script></div>")
 		mu.RLock()
 		for _, clientChan := range clients {
-			clientChan <- []byte("<div id=\"playsound\"><script>window._playSound(null, '" + soundID + "', true)</script></div>")
+			clientChan <- playSoundPayload
 		}
 		mu.RUnlock()
 	})
