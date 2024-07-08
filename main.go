@@ -262,6 +262,7 @@ func main() {
 		}
 
 		waitChan := make(chan struct{})
+
 		go func() {
 			for sound := range soundChan {
 				c.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -281,14 +282,28 @@ func main() {
 		mu.Lock()
 		clients[c] = soundChan
 		mu.Unlock()
-		fmt.Printf("client count: %d\n", len(clients))
 
+		fmt.Printf("++ client count: %d\n", len(clients))
+
+		for {
+			_, _, err := c.ReadMessage()
+			if err != nil {
+				cerr := &websocket.CloseError{}
+				if errors.As(err, &cerr) {
+					fmt.Printf("close error: %v\n", cerr.Error())
+					break
+				}
+			}
+		}
+
+		close(soundChan)
 		<-waitChan
 
 		mu.Lock()
 		delete(clients, c)
 		mu.Unlock()
-		close(soundChan)
+
+		fmt.Printf("-- client count: %d\n", len(clients))
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
