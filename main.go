@@ -297,12 +297,12 @@ func main() {
 			}
 		}
 
-		close(soundChan)
-		<-waitChan
-
 		mu.Lock()
 		delete(clients, c)
 		mu.Unlock()
+
+		close(soundChan)
+		<-waitChan
 
 		fmt.Printf("-- client count: %d\n", len(clients))
 	})
@@ -480,142 +480,157 @@ func main() {
 		}
 	}()
 
-	conn, _, err := websocket.DefaultDialer.Dial("wss://gateway.discord.gg/?encoding=json&v=9", http.Header{})
-	if err != nil {
-		panic(err)
-	}
-
-	recvMsgChan := make(chan DiscordMessage, 100)
-
-	go func() {
-		for {
-			var msg DiscordMessage
-			err := conn.ReadJSON(&msg)
-			if err != nil {
-				panic(err)
-			}
-			recvMsgChan <- msg
+	// Returns true on critical error
+	connectDiscordWebsocket := func() bool {
+		conn, _, err := websocket.DefaultDialer.Dial("wss://gateway.discord.gg/?encoding=json&v=9", http.Header{})
+		if err != nil {
+			return true
 		}
-	}()
 
-	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":2,"d":{"token":"`+authToken+`","capabilities":30717,"properties":{"os":"Windows","browser":"Chrome","device":"","system_locale":"en-US","browser_user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36","browser_version":"125.0.0.0","os_version":"10","referrer":"https://www.google.com/","referring_domain":"www.google.com","search_engine":"google","referrer_current":"","referring_domain_current":"","release_channel":"stable","client_build_number":301920,"client_event_source":null,"design_id":0},"presence":{"status":"unknown","since":0,"activities":[],"afk":false},"compress":false,"client_state":{"guild_versions":{}}}}`))
-	if err != nil {
-		panic(err)
-	}
-	err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":31,"d":{"guild_ids":["`+guildID+`"]}}`))
-	if err != nil {
-		panic(err)
-	}
+		recvMsgChan := make(chan DiscordMessage, 100)
 
-	go func() {
+		go func() {
+			for {
+				var msg DiscordMessage
+				err := conn.ReadJSON(&msg)
+				if err != nil {
+					return
+				}
+				recvMsgChan <- msg
+			}
+		}()
+
+		err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":2,"d":{"token":"`+authToken+`","capabilities":30717,"properties":{"os":"Windows","browser":"Chrome","device":"","system_locale":"en-US","browser_user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36","browser_version":"125.0.0.0","os_version":"10","referrer":"https://www.google.com/","referring_domain":"www.google.com","search_engine":"google","referrer_current":"","referring_domain_current":"","release_channel":"stable","client_build_number":301920,"client_event_source":null,"design_id":0},"presence":{"status":"unknown","since":0,"activities":[],"afk":false},"compress":false,"client_state":{"guild_versions":{}}}}`))
+		if err != nil {
+			return true
+		}
+		err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":31,"d":{"guild_ids":["`+guildID+`"]}}`))
+		if err != nil {
+			return false
+		}
+
 		t := time.NewTicker(10 * time.Second)
-		for range t.C {
-			err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":1,"d":4}`))
-			if err != nil {
-				panic(err)
+		defer t.Stop()
+
+		go func() {
+			for range t.C {
+				err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":1,"d":4}`))
+				if err != nil {
+					return
+				}
 			}
-		}
-	}()
+		}()
 
-	for recvMsg := range recvMsgChan {
-		if recvMsg.Type == nil || recvMsg.Data == nil {
-			continue
-		}
-
-		fetchSoundboardSounds := func() {
-			err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":31,"d":{"guild_ids":["`+guildID+`"]}}`))
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "[error] fetch soundboard sounds error %v\n", err)
+		for recvMsg := range recvMsgChan {
+			if recvMsg.Type == nil || recvMsg.Data == nil {
+				continue
 			}
-		}
 
-		if *recvMsg.Type == "READY" {
-			for _, user := range recvMsg.Data.(map[string]interface{})["users"].([]interface{}) {
-				userID := user.(map[string]interface{})["id"].(string)
-				username := user.(map[string]interface{})["username"].(string)
-				if avatar, ok := user.(map[string]interface{})["avatar"].(string); ok {
-					userInfoCache[userID] = UserInfo{
-						UserID:   userID,
-						Avatar:   avatar,
-						Username: username,
+			fetchSoundboardSounds := func() {
+				err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":31,"d":{"guild_ids":["`+guildID+`"]}}`))
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "[error] fetch soundboard sounds error %v\n", err)
+				}
+			}
+
+			if *recvMsg.Type == "READY" {
+				for _, user := range recvMsg.Data.(map[string]interface{})["users"].([]interface{}) {
+					userID := user.(map[string]interface{})["id"].(string)
+					username := user.(map[string]interface{})["username"].(string)
+					if avatar, ok := user.(map[string]interface{})["avatar"].(string); ok {
+						userInfoCache[userID] = UserInfo{
+							UserID:   userID,
+							Avatar:   avatar,
+							Username: username,
+						}
 					}
 				}
-			}
-		} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
-			newSounds := [8]SoundboardSound{}
+			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
+				newSounds := [8]SoundboardSound{}
 
-			emptyPositions := []int{}
-			soundMap := make(map[string]int)
-			for i, sound := range sounds {
-				if sound == (SoundboardSound{}) {
-					emptyPositions = append(emptyPositions, i)
-				} else {
-					soundMap[sound.ID] = i
+				emptyPositions := []int{}
+				soundMap := make(map[string]int)
+				for i, sound := range sounds {
+					if sound == (SoundboardSound{}) {
+						emptyPositions = append(emptyPositions, i)
+					} else {
+						soundMap[sound.ID] = i
+					}
 				}
-			}
 
-			newUpdates := []SoundboardSoundWithOrdinal{}
-			for _, soundboardSound := range recvMsg.Data.(map[string]interface{})["soundboard_sounds"].([]interface{}) {
-				id := soundboardSound.(map[string]interface{})["sound_id"].(string)
-				name := soundboardSound.(map[string]interface{})["name"].(string)
-				userID := soundboardSound.(map[string]interface{})["user_id"].(string)
-				var avatar string
-				if userInfo, ok := soundboardSound.(map[string]interface{})["user"].(map[string]interface{}); ok {
-					avatar = userInfo["avatar"].(string)
-					old := userInfoCache[userID]
-					old.Avatar = avatar
-					userInfoCache[userID] = old
+				newUpdates := []SoundboardSoundWithOrdinal{}
+				for _, soundboardSound := range recvMsg.Data.(map[string]interface{})["soundboard_sounds"].([]interface{}) {
+					id := soundboardSound.(map[string]interface{})["sound_id"].(string)
+					name := soundboardSound.(map[string]interface{})["name"].(string)
+					userID := soundboardSound.(map[string]interface{})["user_id"].(string)
+					var avatar string
+					if userInfo, ok := soundboardSound.(map[string]interface{})["user"].(map[string]interface{}); ok {
+						avatar = userInfo["avatar"].(string)
+						old := userInfoCache[userID]
+						old.Avatar = avatar
+						userInfoCache[userID] = old
+					}
+					newSound := SoundboardSound{Name: name, ID: id, UserID: userID, Avatar: avatar}
+
+					// check if new sound is in sounds, if so place in same spot
+					if pos, ok := soundMap[newSound.ID]; ok { // sound was already present
+						newSounds[pos] = newSound
+					} else { // otherwise place in first available spot
+						if len(emptyPositions) > 0 {
+							emptyPos := emptyPositions[0]
+							emptyPositions = emptyPositions[1:]
+							newSounds[emptyPos] = newSound
+							// send updates for any sounds added
+							newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
+								ordinal:         emptyPos,
+								SoundboardSound: newSound,
+							})
+						}
+					}
 				}
-				newSound := SoundboardSound{Name: name, ID: id, UserID: userID, Avatar: avatar}
-
-				// check if new sound is in sounds, if so place in same spot
-				if pos, ok := soundMap[newSound.ID]; ok { // sound was already present
-					newSounds[pos] = newSound
-				} else { // otherwise place in first available spot
-					if len(emptyPositions) > 0 {
-						emptyPos := emptyPositions[0]
-						emptyPositions = emptyPositions[1:]
-						newSounds[emptyPos] = newSound
-						// send updates for any sounds added
+				// send updates for any sounds removed
+				for i, newSound := range newSounds {
+					if newSound == (SoundboardSound{}) {
 						newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
-							ordinal:         emptyPos,
-							SoundboardSound: newSound,
+							ordinal: i,
 						})
 					}
 				}
-			}
-			// send updates for any sounds removed
-			for i, newSound := range newSounds {
-				if newSound == (SoundboardSound{}) {
-					newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
-						ordinal: i,
+				sounds = newSounds
+				soundUpdates <- newUpdates
+			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
+				json.NewEncoder(os.Stdout).Encode(recvMsg)
+				fetchSoundboardSounds()
+			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" {
+				json.NewEncoder(os.Stdout).Encode(recvMsg)
+				fetchSoundboardSounds()
+			} else if *recvMsg.Type == "VOICE_STATE_UPDATE" {
+				updateUserID := recvMsg.Data.(map[string]any)["user_id"].(string)
+				updateGuildID := recvMsg.Data.(map[string]any)["guild_id"].(string)
+				if updateUserID == discordClient.userID && guildID == updateGuildID {
+					updateChannelID, ok := recvMsg.Data.(map[string]any)["channel_id"].(string)
+					userIsInChannel.Store(ok && updateChannelID == channelID)
+				}
+				// just force updates on all the sounds!
+				updates := make([]SoundboardSoundWithOrdinal, 0)
+				for i, sound := range sounds {
+					updates = append(updates, SoundboardSoundWithOrdinal{
+						ordinal:         i,
+						SoundboardSound: sound,
 					})
 				}
+				soundUpdates <- updates
 			}
-			sounds = newSounds
-			soundUpdates <- newUpdates
-		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
-			json.NewEncoder(os.Stdout).Encode(recvMsg)
-			fetchSoundboardSounds()
-		} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" {
-			json.NewEncoder(os.Stdout).Encode(recvMsg)
-			fetchSoundboardSounds()
-		} else if *recvMsg.Type == "VOICE_STATE_UPDATE" {
-			updateUserID := recvMsg.Data.(map[string]any)["user_id"].(string)
-			updateGuildID := recvMsg.Data.(map[string]any)["guild_id"].(string)
-			if updateUserID == discordClient.userID && guildID == updateGuildID {
-				updateChannelID, ok := recvMsg.Data.(map[string]any)["channel_id"].(string)
-				userIsInChannel.Store(ok && updateChannelID == channelID)
+		}
+		return false
+	}
+
+	for {
+		for i := 0; i < 5; i++ {
+			if criticalError := connectDiscordWebsocket(); criticalError {
+				continue
 			}
-			// just force updates on all the sounds!
-			updates := make([]SoundboardSoundWithOrdinal, 0)
-			for i, sound := range sounds {
-				updates = append(updates, SoundboardSoundWithOrdinal{
-					ordinal:         i,
-					SoundboardSound: sound,
-				})
-			}
-			soundUpdates <- updates
+			break
 		}
 	}
 }
