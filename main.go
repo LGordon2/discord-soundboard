@@ -543,7 +543,21 @@ func main() {
 				}
 			}
 
-			if *recvMsg.Type == "READY" {
+			if *recvMsg.Type == "READY_SUPPLEMENTAL" {
+				for _, guild := range recvMsg.Data.(map[string]interface{})["guilds"].([]interface{}) {
+					id := guild.(map[string]interface{})["id"].(string)
+					if id != guildID {
+						continue
+					}
+					voiceStates := guild.(map[string]interface{})["voice_states"].([]interface{})
+					for _, voiceState := range voiceStates {
+						voiceStateChannelID := voiceState.(map[string]interface{})["channel_id"].(string)
+						if voiceStateChannelID == channelID {
+							userIsInChannel.Store(true)
+						}
+					}
+				}
+			} else if *recvMsg.Type == "READY" {
 				for _, user := range recvMsg.Data.(map[string]interface{})["users"].([]interface{}) {
 					userID := user.(map[string]interface{})["id"].(string)
 					username := user.(map[string]interface{})["username"].(string)
