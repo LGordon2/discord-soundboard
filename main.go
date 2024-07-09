@@ -48,8 +48,9 @@ const channelID = "284709094588284930" // general channel
 // const channelID = "752332599631806509" // general channel
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  20 * 1024,
-	WriteBufferSize: 20 * 1024,
+	ReadBufferSize:    20 * 1024,
+	WriteBufferSize:   20 * 1024,
+	EnableCompression: true,
 } // use default options
 
 func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) string {
