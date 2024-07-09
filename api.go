@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/bwmarrin/discordgo"
@@ -51,7 +50,7 @@ type SendSoundboardSoundRequest struct {
 }
 
 func (c *DiscordRestClient) SendSoundboardSound(guildId, channelId, soundId string) error {
-	_, err := c.discord.Request(http.MethodPost, fmt.Sprintf(baseURL+"/api/v9/channels/%s/send-soundboard-sound", channelId), SendSoundboardSoundRequest{
+	_, err := c.discord.Request(http.MethodPost, baseURL+"/api/v9/channels/"+channelId+"/send-soundboard-sound", SendSoundboardSoundRequest{
 		SoundID:       soundId,
 		EmojiID:       nil,
 		SourceGuildID: guildId,
@@ -62,7 +61,7 @@ func (c *DiscordRestClient) SendSoundboardSound(guildId, channelId, soundId stri
 }
 
 func (c *DiscordRestClient) DeleteSoundboardSound(guildId, soundId string) error {
-	_, err := c.discord.Request(http.MethodDelete, fmt.Sprintf(baseURL+"/api/v9/guilds/%s/soundboard-sounds/%s", guildId, soundId), nil, func(cfg *discordgo.RequestConfig) {
+	_, err := c.discord.Request(http.MethodDelete, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds/"+soundId, nil, func(cfg *discordgo.RequestConfig) {
 		cfg.Request.Header.Set("X-Super-Properties", superProperties)
 	})
 	return err
