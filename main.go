@@ -486,7 +486,11 @@ func main() {
 		if err != nil {
 			return err, true
 		}
-		defer conn.Close()
+		done := make(chan struct{})
+		defer func() {
+			done <- struct{}{}
+			conn.Close()
+		}()
 
 		recvMsgChan := make(chan DiscordMessage, 100)
 
@@ -510,14 +514,19 @@ func main() {
 			return err, false
 		}
 
-		t := time.NewTicker(10 * time.Second)
-		defer t.Stop()
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
 
 		go func() {
-			for range t.C {
-				err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":1,"d":4}`))
-				if err != nil {
+			for {
+				select {
+				case <-done:
 					return
+				case <-ticker.C:
+					err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":1,"d":4}`))
+					if err != nil {
+						return
+					}
 				}
 			}
 		}()
