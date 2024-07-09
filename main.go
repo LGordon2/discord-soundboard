@@ -499,6 +499,8 @@ func main() {
 				var msg DiscordMessage
 				err := conn.ReadJSON(&msg)
 				if err != nil {
+					fmt.Fprintf(os.Stderr, "[discord-websocket] read error occurred shutting down: %v", err)
+					close(recvMsgChan)
 					return
 				}
 				recvMsgChan <- msg

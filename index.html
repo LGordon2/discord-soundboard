@@ -74,7 +74,7 @@
             if (elId) {
                 el = document.querySelector('#' + elId)
             }
-            audio.addEventListener("loadeddata", () => {
+            audio.addEventListener("canplaythrough", () => {
                 if (el) {
                     if (playTimeouts[soundId]) {
                         clearTimeout(playTimeouts[soundId]);
