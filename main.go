@@ -142,7 +142,7 @@ func main() {
 			avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
 			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
 		}
-		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-screen-2xl\">")
 		for _, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
 			if _, ok := soundMap[storedSoundNoExt]; ok {
