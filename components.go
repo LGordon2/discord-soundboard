@@ -28,7 +28,7 @@ const uploadedByComponentTmplRaw = `
 `
 
 const addSoundCardComponentTmplRaw = `
-    <div draggable="true" hx-on="htmx:beforeProcessNode: window._makeDraggable(this)
+    <div hx-on="htmx:beforeProcessNode: window._makeDraggable(this)
     htmx:afterProcessNode: window._updateOrder(this)" data-soundname="{{ .soundName }}"
         class="h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
         <div class="flex flex-row">
