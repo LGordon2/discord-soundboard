@@ -130,6 +130,75 @@
             configurePlaySendSoundEl()
         }
 
+        let dragged = null;
+
+        const dragStart = (e) => {
+            dragged = event.target;
+            document.querySelectorAll('.droppable').forEach((el) => {
+                const classesToAdd = ['border-sky-400']
+                const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
+
+                el.classList.add(...classesToAdd)
+                el.classList.remove(...classesToRemove)
+            })
+        }
+
+        const dragEnd = (e) => {
+            document.querySelectorAll('.droppable').forEach((el) => {
+                const classesToRemove = ['border-sky-400']
+                const classesToAdd = ['border-gray-200', 'dark:border-gray-700']
+
+                el.classList.add(...classesToAdd)
+                el.classList.remove(...classesToRemove)
+            })
+        }
+
+        const makeDroppable = (el) => {
+            const target = el
+            target.addEventListener('dragover', (event) => {
+                event.preventDefault()
+            })
+
+            target.addEventListener('drop', (event) => {
+                event.preventDefault()
+                let target = event.target
+                event.stopImmediatePropagation()
+                while (!target.classList.contains('droppable')) {
+                    target = target.parentNode
+                }
+                if (target.classList.contains('droppable')) {
+
+                    const soundLocation = dragged.getAttribute('data-soundname')
+                    const soundID = target.getAttribute('data-soundid')
+                    const body = {
+                        add: {
+                            soundLocation
+                        }
+                    }
+                    if (soundID != null && soundID !== '') {
+                        body.delete = {
+                            soundID,
+                        }
+                    }
+
+                    fetch('/swap-sound', {
+                        method: 'POST',
+                        headers: {
+                            'content-type': 'application/json'
+                        },
+                        body: JSON.stringify(body)
+                    })
+                }
+            })
+        }
+
+        const makeDraggable = (el) => {
+            el.addEventListener('dragstart', dragStart)
+            el.addEventListener('dragend', dragEnd)
+        }
+
+        window._makeDraggable = makeDraggable;
+        window._makeDroppable = makeDroppable;
         window._updateOrder = updateOrder;
         window._updateStats = updateStats;
         window._playSound = playSound;

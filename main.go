@@ -134,13 +134,13 @@ func main() {
 		// write updates for new sounds
 		for _, sound := range newSounds {
 			if sound.SoundboardSound == (SoundboardSound{}) {
-				buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, nil))
+				buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, true, nil))
 			}
 			disabled := sound.UserID != discordClient.userID
 			_, cannotSave := storedSoundMap[sound.Name]
 			userInfo := userInfoCache[sound.UserID]
 			avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
-			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
+			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
 		}
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-screen-2xl\">")
 		for _, storedSound := range storedSounds {
@@ -348,11 +348,47 @@ func main() {
 
 		http.FileServer(http.Dir(".")).ServeHTTP(w, r)
 	})
-	http.Handle("/delete-sound", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := discordClient.DeleteSoundboardSound(r.URL.Query().Get("guildID"), r.URL.Query().Get("soundID"))
+	http.HandleFunc("/swap-sound", func(w http.ResponseWriter, r *http.Request) {
+		input := struct {
+			Add    addSoundInput    `json:"add"`
+			Delete deleteSoundInput `json:"delete"`
+		}{}
+
+		err := json.NewDecoder(r.Body).Decode(&input)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "[error] deleting file %v", err)
+			fmt.Fprintf(os.Stderr, "[error] decoding: %v\n", err)
+			fmt.Fprintf(w, "%v", err)
+			return
+		}
+
+		if input.Delete != (deleteSoundInput{}) {
+			err = deleteSound(discordClient, guildID, input.Delete)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(os.Stderr, "[error] deleting during swap: %v\n", err)
+				fmt.Fprintf(w, "[error] deleting during swap: %v", err)
+				return
+			}
+		}
+
+		err = addSound(discordClient, storedSoundMap, input.Add)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(os.Stderr, "[error] adding during swap: %v\n", err)
+			fmt.Fprintf(w, "[error] adding during swap: %v", err)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	})
+	http.Handle("/delete-sound", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := deleteSound(discordClient, r.URL.Query().Get("guildID"), deleteSoundInput{
+			SoundID: r.URL.Query().Get("soundID"),
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "%v", err)
 			return
 		}
 
@@ -360,31 +396,12 @@ func main() {
 	}))
 	http.HandleFunc("/add-sound", func(w http.ResponseWriter, r *http.Request) {
 		soundLocation := r.URL.Query().Get("soundLocation")
-		nameWithoutExt := strings.Split(soundLocation, ".")[0]
-		var data []byte
-		if soundData, ok := storedSoundMap[nameWithoutExt]; ok {
-			data = soundData
-		} else {
-			fileData, err := os.ReadFile(path.Join(soundsDir, soundLocation))
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] trouble reading file %s", soundLocation)
-				return
-			}
-			data = fileData
-		}
-
-		arr := strings.Split(soundLocation, "/")
-		nameAndExt := arr[len(arr)-1]
-
-		arr = strings.Split(nameAndExt, ".")
-		name := arr[0]
-		extension := arr[len(arr)-1]
-
-		_, err = discordClient.CreateSoundboardSound(guildID, name, "audio/"+extension, data)
+		err := addSound(discordClient, storedSoundMap, addSoundInput{
+			SoundLocation: soundLocation,
+		})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "[error] creating soundboard sound for %s %v", soundLocation, err)
+			fmt.Fprintf(w, "%v", err)
 			return
 		}
 

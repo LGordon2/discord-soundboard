@@ -28,7 +28,8 @@ const uploadedByComponentTmplRaw = `
 `
 
 const addSoundCardComponentTmplRaw = `
-    <div hx-on="htmx:afterProcessNode: window._updateOrder(this)" data-soundname="{{ .soundName }}"
+    <div draggable="true" hx-on="htmx:beforeProcessNode: window._makeDraggable(this)
+    htmx:afterProcessNode: window._updateOrder(this)" data-soundname="{{ .soundName }}"
         class="h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
         <div class="flex flex-row">
             <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
@@ -39,8 +40,8 @@ const addSoundCardComponentTmplRaw = `
 `
 
 const soundCardComponentTmplRaw = `
-<div id="soundboard-{{.ordinal}}"
-            class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
+<div {{ if .canRemove }}hx-on="htmx:beforeProcessNode: window._makeDroppable(this)"{{end}} data-soundid="{{.soundId}}" id="soundboard-{{.ordinal}}"
+            class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700 {{ if .canRemove }}droppable{{ end }}">
             {{ if .used }}
             <div class="flex flex-row">
                 <h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">{{.soundName}}
@@ -69,8 +70,9 @@ const soundCardComponentTmplRaw = `
         </div>
 `
 
-func soundCardComponent(i int, id, name string, canSend bool, canSave, deleteButton any) string {
+func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool, deleteButton any) string {
 	var builder strings.Builder
+	used := id != "" && name != "" && deleteButton != nil
 	m := map[string]any{
 		"ordinal":      i,
 		"soundId":      id,
@@ -78,7 +80,8 @@ func soundCardComponent(i int, id, name string, canSend bool, canSave, deleteBut
 		"deleteButton": deleteButton,
 		"canSend":      canSend,
 		"canSave":      canSave,
-		"used":         id != "" && name != "" && deleteButton != nil,
+		"canRemove":    canRemove || !used,
+		"used":         used,
 	}
 	err := soundCardComponentTmpl.Execute(&builder, m)
 	if err != nil {
