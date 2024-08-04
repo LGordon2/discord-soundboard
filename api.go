@@ -73,10 +73,10 @@ type CreateSoundboardSoundRequest struct {
 }
 
 type CreateSoundboardSoundResponse struct {
-	Name    string `json:"name"`
-	SoundID string `json:"sound_id"`
-	ID      string `json:"id"`
-	Volume  int    `json:"volume"`
+	Name    string  `json:"name"`
+	SoundID string  `json:"sound_id"`
+	ID      string  `json:"id"`
+	Volume  float32 `json:"volume"`
 	// There are more, but I'm too lazy to add them.
 }
 

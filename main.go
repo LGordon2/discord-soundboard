@@ -533,6 +533,8 @@ func main() {
 			return err, false
 		}
 
+		var wsConnMu sync.Mutex
+
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 
@@ -542,7 +544,9 @@ func main() {
 				case <-done:
 					return
 				case <-ticker.C:
+					wsConnMu.Lock()
 					err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":1,"d":4}`))
+					wsConnMu.Unlock()
 					if err != nil {
 						return
 					}
@@ -556,7 +560,9 @@ func main() {
 			}
 
 			fetchSoundboardSounds := func() {
+				wsConnMu.Lock()
 				err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":31,"d":{"guild_ids":["`+guildID+`"]}}`))
+				wsConnMu.Unlock()
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[error] fetch soundboard sounds error %v\n", err)
 				}
