@@ -8,6 +8,7 @@ import (
 var (
 	addSoundCardComponentTmpl *template.Template
 	soundCardComponentTmpl    *template.Template
+	uploadedByComponentTmpl   *template.Template
 )
 
 const uploadedByComponentTmplRaw = `
@@ -110,7 +111,7 @@ func uploadedByComponent(username, avatarCDN string) string {
 		"username":  username,
 		"avatarCDN": avatarCDN,
 	}
-	err := template.Must(template.New("uploadedByComponentTmpl").Parse(uploadedByComponentTmplRaw)).Execute(&builder, m)
+	err := uploadedByComponentTmpl.Execute(&builder, m)
 	if err != nil {
 		panic(err)
 	}
@@ -120,4 +121,5 @@ func uploadedByComponent(username, avatarCDN string) string {
 func init() {
 	addSoundCardComponentTmpl = template.Must(template.New("addSoundCardComponentTmpl").Parse(addSoundCardComponentTmplRaw))
 	soundCardComponentTmpl = template.Must(template.New("soundCardComponentTmpl").Parse(soundCardComponentTmplRaw))
+	uploadedByComponentTmpl = template.Must(template.New("uploadedByComponentTmpl").Parse(uploadedByComponentTmplRaw))
 }
