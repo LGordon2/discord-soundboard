@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,9 +16,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/segmentio/encoding/json"
 	"github.com/tdewolff/minify"
 	"github.com/tdewolff/minify/html"
-	_ "github.com/tdewolff/minify/v2/html"
 )
 
 type DiscordMessage struct {
@@ -330,7 +329,7 @@ func main() {
 			if resp.StatusCode != http.StatusOK {
 				data, _ := io.ReadAll(resp.Body)
 				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "invalid status code %v %v", resp.StatusCode, string(data))
+				fmt.Fprintf(w, "[error] invalid status code %v %v", resp.StatusCode, string(data))
 				return
 			}
 
@@ -344,6 +343,14 @@ func main() {
 
 			fmt.Println(m)
 			discordClient = NewDiscordRestClient(m["access_token"].(string), "Bearer")
+			r2, err := http.NewRequest("GET", "/", nil)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(w, "[error] %v", err)
+				return
+			}
+			http.Redirect(w, r2, "/", http.StatusFound)
+			return
 		}
 
 		http.FileServer(http.Dir(".")).ServeHTTP(w, r)
@@ -533,20 +540,24 @@ func main() {
 			return err, false
 		}
 
-		var wsConnMu sync.Mutex
-
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
+
+		msgChan := make(chan []byte, 100)
 
 		go func() {
 			for {
 				select {
 				case <-done:
 					return
+				case msg := <-msgChan:
+					err = conn.WriteMessage(websocket.TextMessage, msg)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "[error] writing message to discord ws %v\n", err)
+					}
+					ticker.Reset(10 * time.Second)
 				case <-ticker.C:
-					wsConnMu.Lock()
 					err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":1,"d":4}`))
-					wsConnMu.Unlock()
 					if err != nil {
 						return
 					}
@@ -554,18 +565,13 @@ func main() {
 			}
 		}()
 
+		fetchSoundboardSounds := func() {
+			msgChan <- []byte(`{"op":31,"d":{"guild_ids":["` + guildID + `"]}}`)
+		}
+
 		for recvMsg := range recvMsgChan {
 			if recvMsg.Type == nil || recvMsg.Data == nil {
 				continue
-			}
-
-			fetchSoundboardSounds := func() {
-				wsConnMu.Lock()
-				err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":31,"d":{"guild_ids":["`+guildID+`"]}}`))
-				wsConnMu.Unlock()
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "[error] fetch soundboard sounds error %v\n", err)
-				}
 			}
 
 			if *recvMsg.Type == "READY_SUPPLEMENTAL" {
