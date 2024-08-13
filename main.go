@@ -294,11 +294,9 @@ func main() {
 		for {
 			_, _, err := c.ReadMessage()
 			if err != nil {
-				cerr := &websocket.CloseError{}
-				if errors.As(err, &cerr) {
-					fmt.Printf("close error: %v\n", cerr.Error())
-					break
-				}
+				fmt.Printf("read error: %v\n", err)
+				c.Close()
+				break
 			}
 		}
 
