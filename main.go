@@ -116,7 +116,8 @@ func main() {
 	}
 	discordClient := NewDiscordRestClient(authToken, "")
 
-	soundUpdates := make(chan []SoundboardSoundWithOrdinal)
+	msgUpdates := make(chan []byte, 100)
+	soundUpdates := make(chan []SoundboardSoundWithOrdinal, 100)
 	clients := make(map[*websocket.Conn]chan []byte)
 	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
 		var buf bytes.Buffer
@@ -157,9 +158,14 @@ func main() {
 	go func() {
 		for newSounds := range soundUpdates {
 			buf := latestSoundUpdate(newSounds)
+			msgUpdates <- buf.Bytes()
+		}
+	}()
+	go func() {
+		for msgUpdate := range msgUpdates {
 			mu.RLock()
 			for _, c := range clients {
-				c <- buf.Bytes()
+				c <- msgUpdate
 			}
 			mu.RUnlock()
 		}
@@ -283,7 +289,7 @@ func main() {
 		clients[c] = soundChan
 		mu.Unlock()
 
-		fmt.Printf("++ client count: %d\n", len(clients))
+		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", len(clients)))
 
 		for {
 			_, _, err := c.ReadMessage()
@@ -303,7 +309,7 @@ func main() {
 		close(soundChan)
 		<-waitChan
 
-		fmt.Printf("-- client count: %d\n", len(clients))
+		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", len(clients)))
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
