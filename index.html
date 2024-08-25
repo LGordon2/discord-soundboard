@@ -134,6 +134,22 @@
             el.innerHTML = iconSvg
         }
 
+        const highlightSound = (el, audio, soundId) => {
+            if (playTimeouts[soundId]) {
+                clearTimeout(playTimeouts[soundId]);
+            }
+            const classesToAdd = ['border-green-400']
+            const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
+
+            el.classList.add(...classesToAdd)
+            el.classList.remove(...classesToRemove)
+            const timeoutId = setTimeout(() => {
+                el.classList.add(...classesToRemove)
+                el.classList.remove(...classesToAdd)
+            }, audio.duration * 1000)
+            playTimeouts[soundId] = timeoutId;
+        }
+
         /**
          *    Mute sounds | Play send sounds | IsSendSound? || Sound played?
          * 1.     F       |  F               | F            || T
@@ -153,19 +169,7 @@
             }
             audio.addEventListener("canplaythrough", () => {
                 if (el) {
-                    if (playTimeouts[soundId]) {
-                        clearTimeout(playTimeouts[soundId]);
-                    }
-                    const classesToAdd = ['border-green-400']
-                    const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
-
-                    el.classList.add(...classesToAdd)
-                    el.classList.remove(...classesToRemove)
-                    const timeoutId = setTimeout(() => {
-                        el.classList.add(...classesToRemove)
-                        el.classList.remove(...classesToAdd)
-                    }, audio.duration * 1000)
-                    playTimeouts[soundId] = timeoutId;
+                    highlightSound(el, audio, soundId)
                 }
                 if (!muted.state) {
                     if (!sent || sent && shouldPlaySendSounds.state) {
@@ -251,9 +255,21 @@
             el.addEventListener('dragend', dragEnd)
         }
 
-
         window._makeDraggable = makeDraggable;
         window._makeDroppable = makeDroppable;
+        // TODO this is pretty much the same as play sound
+        window._highlightSound = (elId, soundId) => {
+            const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
+            let el = undefined;
+            if (elId) {
+                el = document.querySelector('#' + elId)
+            }
+            audio.addEventListener("canplaythrough", () => {
+                if (el) {
+                    highlightSound(el, audio, soundId)
+                }
+            });
+        };
         window._playSound = playSound;
         window._muteSounds = muteSounds;
         window._playSendSounds = playSendSounds;
