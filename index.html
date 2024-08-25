@@ -62,7 +62,7 @@
     <script type="text/javascript">
         const playTimeouts = {}
         window._addStats = {}
-        let shouldPlay = window.localStorage.getItem('shouldPlay') === 'true'
+        let shouldPlay = window.localStorage.getItem('shouldPlay') === null || window.localStorage.getItem('shouldPlay') === 'true'
         document.getElementById('mute-sounds-checkbox').checked = !shouldPlay
         let shouldPlaySendSounds = window.localStorage.getItem('shouldPlaySendSounds') === 'true'
         document.getElementById('play-send-sounds-checkbox').checked = shouldPlaySendSounds
