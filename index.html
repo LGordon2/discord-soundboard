@@ -168,7 +168,7 @@
                     playTimeouts[soundId] = timeoutId;
                 }
                 if (!muted.state) {
-                    if (sent === shouldPlaySendSounds.state) {
+                    if (sent && shouldPlaySendSounds.state) {
                         audio.play()
                     }
                 }
