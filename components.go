@@ -57,7 +57,7 @@ const soundCardComponentTmplRaw = `
 
             <div class="flex flex-row divide-x divide-gray-700">
                 <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')" hx-on:click="window._playSound('soundboard-{{.ordinal}}', '{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1"></button>
-                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/send-sound?soundID={{.soundId}}" hx-swap="none" hx-on:click="window._playSound('soundboard-{{.ordinal}}', '{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500" {{if not .canSend}}disabled="true"{{end}}></button>
+                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/send-sound?soundID={{.soundId}}" hx-swap="none" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500" {{if not .canSend}}disabled="true"{{end}}></button>
                 {{ if .deleteButton }}
                 {{.deleteButton}}
                 {{ end }}
