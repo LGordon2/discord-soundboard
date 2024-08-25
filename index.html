@@ -62,10 +62,37 @@
     <script type="text/javascript">
         const playTimeouts = {}
         window._addStats = {}
-        let shouldPlay = window.localStorage.getItem('shouldPlay') === null || window.localStorage.getItem('shouldPlay') === 'true'
-        document.getElementById('mute-sounds-checkbox').checked = !shouldPlay
-        let shouldPlaySendSounds = window.localStorage.getItem('shouldPlaySendSounds') === 'true'
-        document.getElementById('play-send-sounds-checkbox').checked = shouldPlaySendSounds
+
+        const toggleState = (id) => {
+            const state = window.localStorage.getItem(id) === 'true'
+            const el = document.getElementById(id)
+            el.checked = state
+            const _toggleState = {
+                update: (newState) => {
+                    window.localStorage.setItem(id, newState)
+                    el.checked = newState
+                    _toggleState.state = newState
+                },
+                state,
+            }
+            return _toggleState
+        }
+
+        let muted = toggleState('mute-sounds-checkbox')
+        let shouldPlaySendSounds = toggleState('play-send-sounds-checkbox')
+
+        const configurePlaySendSoundEl = () => {
+            const el = document.querySelector('#playsound') ?? document.querySelector('#playsounddisabled')
+            if (el) {
+                if (shouldPlaySendSounds.state) {
+                    el.setAttribute('id', 'playsound')
+                } else {
+                    el.setAttribute('id', 'playsounddisabled')
+                }
+            }
+        }
+
+        configurePlaySendSoundEl()
 
         const iconLoad = (el, iconType) => {
             let iconSvg;
@@ -140,8 +167,8 @@
                     }, audio.duration * 1000)
                     playTimeouts[soundId] = timeoutId;
                 }
-                if (shouldPlay) {
-                    if (sent === shouldPlaySendSounds) {
+                if (!muted.state) {
+                    if (sent === shouldPlaySendSounds.state) {
                         audio.play()
                     }
                 }
@@ -161,24 +188,11 @@
         }
 
         const muteSounds = (ev) => {
-            shouldPlay = !ev.target.checked
-            window.localStorage.setItem('shouldPlay', shouldPlay)
-        }
-
-        const configurePlaySendSoundEl = () => {
-            const el = document.querySelector('#playsound') ?? document.querySelector('#playsounddisabled')
-            if (el) {
-                if (shouldPlaySendSounds) {
-                    el.setAttribute('id', 'playsound')
-                } else {
-                    el.setAttribute('id', 'playsounddisabled')
-                }
-            }
+            muted.update(ev.target.checked)
         }
 
         const playSendSounds = (ev) => {
-            shouldPlaySendSounds = ev.target.checked
-            window.localStorage.setItem('shouldPlaySendSounds', shouldPlaySendSounds)
+            shouldPlaySendSounds.update(ev.target.checked)
             configurePlaySendSoundEl()
         }
 
