@@ -2,3 +2,4 @@ venv/
 discord-soundboard
 .env
 .env.bat
+sound-archive
