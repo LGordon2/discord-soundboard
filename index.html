@@ -175,18 +175,6 @@
             });
         }
 
-        const updateStats = (soundName) => {
-            // if (!window._addStats[soundName]) {
-            //     window._addStats[soundName] = 0
-            //}
-            // window._addStats[soundName]++
-        }
-
-        const updateOrder = (el) => {
-            // const soundName = el.getAttribute('data-soundname') ?? ''
-            // el.classList.add(`order-[${String(9999 - (window._addStats[soundName] ?? 0))}]`)
-        }
-
         const muteSounds = (ev) => {
             muted.update(ev.target.checked)
         }
@@ -266,8 +254,6 @@
 
         window._makeDraggable = makeDraggable;
         window._makeDroppable = makeDroppable;
-        window._updateOrder = updateOrder;
-        window._updateStats = updateStats;
         window._playSound = playSound;
         window._muteSounds = muteSounds;
         window._playSendSounds = playSendSounds;

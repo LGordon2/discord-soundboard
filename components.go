@@ -29,13 +29,12 @@ const uploadedByComponentTmplRaw = `
 `
 
 const addSoundCardComponentTmplRaw = `
-    <div draggable="true" hx-on="htmx:beforeProcessNode: window._makeDraggable(this)
-    htmx:afterProcessNode: window._updateOrder(this)" data-soundname="{{ .soundName }}"
+    <div draggable="true" hx-on="htmx:beforeProcessNode: window._makeDraggable(this)" data-soundname="{{ .soundName }}"
         class="h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
         <div class="flex flex-row">
             <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
             </h5>
-            <button class="flex shrink items-center justify-center enabled:text-green-500 disabled:text-gray-500" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'plus')" {{if .disabled}}disabled="true"{{else}}hx-on:click="window._updateStats('{{ .soundName }}')" hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}"{{end}}></button>
+            <button class="flex shrink items-center justify-center {{if .disabled}}text-gray-500{{else}}text-green-500{{end}}" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'plus')" {{if .disabled}}disabled="true"{{else}}hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}"{{end}}></button>
         </div>
     </div>
 `
