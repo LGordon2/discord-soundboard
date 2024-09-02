@@ -34,7 +34,7 @@ const addSoundCardComponentTmplRaw = `
         <div class="flex flex-row">
             <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
             </h5>
-            <button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" hx-swap="none" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'plus')" {{if .disabled}}disabled="true"{{else}}hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}"{{end}}></button>
+            <button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" hx-swap="none" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'plus')" hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}"></button>
         </div>
     </div>
 `
