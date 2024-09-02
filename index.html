@@ -49,6 +49,7 @@
                 </div>
             </div>
             <div id="playsounddisabled"></div>
+            <div id="addsoundscript"></div>
             <div class="p-4 flex flex-row text-gray-900 dark:text-white">
                 <svg class="h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     stroke-width="1.5" stroke="currentColor" class="size-6">
@@ -255,6 +256,23 @@
             el.addEventListener('dragend', dragEnd)
         }
 
+        const addSoundUpdates = (hiddenSounds, hasEmpty) => {
+            let disableFn = (el) => el.setAttribute('disabled', 'true')
+            if (hasEmpty) {
+                disableFn = (el) => el.removeAttribute('disabled')
+            }
+            document.querySelectorAll(".add-sound-component").forEach((el) => {
+                const soundName = el.getAttribute('data-soundname')
+                const splitSoundName = soundName.split('.')[0]
+                if (soundName && hiddenSounds.includes(splitSoundName)) { // should be hidden
+                    el.classList.add('hidden');
+                } else {
+                    el.classList.remove('hidden');
+                }
+                disableFn(el.querySelector('button'))
+            });
+        }
+
         window._makeDraggable = makeDraggable;
         window._makeDroppable = makeDroppable;
         // TODO this is pretty much the same as play sound
@@ -274,6 +292,7 @@
         window._muteSounds = muteSounds;
         window._playSendSounds = playSendSounds;
         window._iconLoad = iconLoad;
+        window._addSoundUpdates = addSoundUpdates;
     </script>
 </body>
 

@@ -121,16 +121,6 @@ func main() {
 	clients := make(map[*websocket.Conn]chan []byte)
 	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
 		var buf bytes.Buffer
-		soundMap := make(map[string]bool)
-		hasEmpty := false
-		// This is used later to prune sounds that can be added or disables adding new sounds.
-		for _, sound := range sounds {
-			if sound == (SoundboardSound{}) {
-				hasEmpty = true
-				continue
-			}
-			soundMap[sound.Name] = true
-		}
 		// write updates for new sounds
 		for _, sound := range newSounds {
 			if sound.SoundboardSound == (SoundboardSound{}) {
@@ -142,15 +132,25 @@ func main() {
 			avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
 			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
 		}
-		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-		for _, storedSound := range storedSounds {
-			storedSoundNoExt := strings.Split(storedSound, ".")[0]
-			if _, ok := soundMap[storedSoundNoExt]; ok {
-				continue
+
+		hasEmpty := false
+		hiddenSounds := make([]string, 0)
+		// This is used later to prune sounds that can be added or disables adding new sounds.
+		for _, sound := range sounds {
+			if sound == (SoundboardSound{}) {
+				hasEmpty = true
+				break
 			}
-			buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty))
+			hiddenSounds = append(hiddenSounds, "'"+sound.Name+"'")
 		}
-		buf.WriteString("</div>")
+		hiddenSoundString := "[" + strings.Join(hiddenSounds, ",") + "]"
+		hasEmptyString := "false"
+		if hasEmpty {
+			hasEmptyString = "true"
+		}
+
+		buf.WriteString(`<div id="addsoundscript"><script type="text/javascript">window._addSoundUpdates(` + hiddenSoundString + `, ` + hasEmptyString + `)</script></div>`)
+
 		var minifiedBuf bytes.Buffer
 		m.Minify("text/html", &minifiedBuf, &buf)
 		return minifiedBuf
@@ -283,6 +283,25 @@ func main() {
 			waitChan <- struct{}{}
 		}()
 		buf := latestSoundUpdate(soundsWithOrdinal)
+		soundMap := make(map[string]bool)
+		hasEmpty := false
+		// This is used later to prune sounds that can be added or disables adding new sounds.
+		for _, sound := range sounds {
+			if sound == (SoundboardSound{}) {
+				hasEmpty = true
+				continue
+			}
+			soundMap[sound.Name] = true
+		}
+		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		for _, storedSound := range storedSounds {
+			storedSoundNoExt := strings.Split(storedSound, ".")[0]
+			if _, ok := soundMap[storedSoundNoExt]; ok {
+				continue
+			}
+			buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty))
+		}
+		buf.WriteString("</div>")
 		soundChan <- buf.Bytes()
 
 		mu.Lock()
