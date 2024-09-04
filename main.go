@@ -141,7 +141,7 @@ func main() {
 				hasEmpty = true
 				break
 			}
-			hiddenSounds = append(hiddenSounds, "'"+sound.Name+"'")
+			hiddenSounds = append(hiddenSounds, "\""+sound.Name+"\"")
 		}
 		hiddenSoundString := "[" + strings.Join(hiddenSounds, ",") + "]"
 		hasEmptyString := "false"
