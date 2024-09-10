@@ -30,7 +30,7 @@ const uploadedByComponentTmplRaw = `
 
 const addSoundCardComponentTmplRaw = `
     <div draggable="true" hx-on="htmx:beforeProcessNode: window._makeDraggable(this)" data-soundname="{{ .soundName }}"
-        class="add-sound-component h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
+        class="add-sound-component h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700 {{if .hidden}}hidden{{end}}">
         <div class="flex flex-row">
             <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
             </h5>
@@ -90,12 +90,13 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 	return builder.String()
 }
 
-func addSoundCardComponent(storedSound, guildID string, disabled bool) string {
+func addSoundCardComponent(storedSound, guildID string, disabled, hidden bool) string {
 	var builder strings.Builder
 	m := map[string]any{
 		"soundName": storedSound,
 		"guildID":   guildID,
 		"disabled":  disabled,
+		"hidden":    hidden,
 	}
 	err := addSoundCardComponentTmpl.Execute(&builder, m)
 	if err != nil {

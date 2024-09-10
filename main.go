@@ -296,10 +296,12 @@ func main() {
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		for _, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
+			// hide sounds already present on the sound map
 			if _, ok := soundMap[storedSoundNoExt]; ok {
-				continue
+				buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty, true))
+			} else {
+				buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty, false))
 			}
-			buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty))
 		}
 		buf.WriteString("</div>")
 		soundChan <- buf.Bytes()
