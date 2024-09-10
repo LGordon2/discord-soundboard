@@ -46,6 +46,8 @@ const channelID = "284709094588284930" // general channel
 // const guildID = "752332599631806505"   // Faceclub
 // const channelID = "752332599631806509" // general channel
 
+const soundboardSoundCount = 8
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  32 * 1024,
 	WriteBufferSize: 32 * 1024,
@@ -109,7 +111,7 @@ func main() {
 	var userIsInChannel atomic.Bool
 	userIsInChannel.Store(false)
 	var mu sync.RWMutex
-	sounds := [8]SoundboardSound{}
+	sounds := [soundboardSoundCount]SoundboardSound{}
 	storedSounds, storedSoundMap, err := fetchStoredSounds()
 	if err != nil {
 		panic(err)
@@ -282,7 +284,15 @@ func main() {
 			}
 			waitChan <- struct{}{}
 		}()
-		buf := latestSoundUpdate(soundsWithOrdinal)
+		var buf bytes.Buffer
+		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		for i := 0; i < soundboardSoundCount; i++ {
+			buf.WriteString(fmt.Sprintf("<div id=\"soundboard-%d\"></div>", i))
+		}
+		buf.WriteString("</div>")
+		soundChan <- buf.Bytes()
+
+		buf = latestSoundUpdate(soundsWithOrdinal)
 		soundMap := make(map[string]bool)
 		hasEmpty := false
 		// This is used later to prune sounds that can be added or disables adding new sounds.
@@ -293,6 +303,7 @@ func main() {
 			}
 			soundMap[sound.Name] = true
 		}
+
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		for _, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
@@ -626,7 +637,7 @@ func main() {
 					}
 				}
 			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
-				newSounds := [8]SoundboardSound{}
+				newSounds := [soundboardSoundCount]SoundboardSound{}
 
 				emptyPositions := []int{}
 				soundMap := make(map[string]int)
