@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -61,9 +63,11 @@ func (c *DiscordRestClient) SendSoundboardSound(guildId, channelId, soundId stri
 }
 
 func (c *DiscordRestClient) DeleteSoundboardSound(guildId, soundId string) error {
+	start := time.Now()
 	_, err := c.discord.Request(http.MethodDelete, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds/"+soundId, nil, func(cfg *discordgo.RequestConfig) {
 		cfg.Request.Header.Set("X-Super-Properties", superProperties)
 	})
+	fmt.Printf("DeleteSoundboardSound: %v\n", time.Since(start))
 	return err
 }
 
@@ -85,6 +89,7 @@ func (c *DiscordRestClient) CreateSoundboardSound(guildId, name, mimeType string
 	soundBuf.WriteString("data:" + mimeType + ";base64,")
 	soundBuf.WriteString(base64.StdEncoding.EncodeToString(data))
 
+	start := time.Now()
 	resp, err := c.discord.Request(http.MethodPost, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds", CreateSoundboardSoundRequest{
 		Name:  name,
 		Sound: soundBuf.String(),
@@ -94,6 +99,7 @@ func (c *DiscordRestClient) CreateSoundboardSound(guildId, name, mimeType string
 	if err != nil {
 		return CreateSoundboardSoundResponse{}, err
 	}
+	fmt.Printf("CreateSoundboardSound: %v\n", time.Since(start))
 
 	var soundboardResponse CreateSoundboardSoundResponse
 	err = json.Unmarshal(resp, &soundboardResponse)
