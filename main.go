@@ -272,9 +272,18 @@ func main() {
 		waitChan := make(chan struct{})
 
 		go func() {
-			for sound := range soundChan {
-				c.SetWriteDeadline(time.Now().Add(10 * time.Second))
-				if err := c.WriteMessage(websocket.TextMessage, []byte(sound)); err != nil {
+			for {
+				timer := time.NewTimer(5 * time.Second)
+				var err error
+				select {
+				case <-timer.C:
+					err = c.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(2*time.Second))
+				case sound := <-soundChan:
+					c.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					err = c.WriteMessage(websocket.TextMessage, []byte(sound))
+				}
+
+				if err != nil {
 					opErr := &net.OpError{}
 					if errors.Is(err, websocket.ErrCloseSent) || errors.As(err, &opErr) {
 						break
