@@ -21,10 +21,41 @@ import (
 	"github.com/tdewolff/minify/html"
 )
 
+type UserData struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+}
+
+type SoundData struct {
+	SoundID string `json:"sound_id"`
+	Name    string `json:"name"`
+	UserID  string `json:"user_id"`
+	User    UserData
+}
+
+type VoiceState struct {
+	ChannelID string `json:"channel_id"`
+}
+
+type GuildData struct {
+	ID          string       `json:"id"`
+	VoiceStates []VoiceState `json:"voice_states"`
+}
+
+type DiscordMessageData struct {
+	Guilds           []GuildData `json:"guilds"`
+	UserID           string      `json:"user_id"`
+	ChannelID        string      `json:"channel_id"`
+	Users            []UserData  `json:"users"`
+	GuildID          string      `json:"guild_id"`
+	SoundboardSounds []SoundData `json:"soundboard_sounds"`
+}
+
 type DiscordMessage struct {
-	Type    *string     `json:"t"`
-	GuildID *string     `json:"guild_id"`
-	Data    interface{} `json:"d"`
+	Type    *string             `json:"t"`
+	GuildID *string             `json:"guild_id"`
+	Data    *DiscordMessageData `json:"d"`
 }
 
 type SoundboardSound struct {
@@ -620,32 +651,27 @@ func main() {
 			}
 
 			if *recvMsg.Type == "READY_SUPPLEMENTAL" {
-				for _, guild := range recvMsg.Data.(map[string]interface{})["guilds"].([]interface{}) {
-					id := guild.(map[string]interface{})["id"].(string)
-					if id != guildID {
+				for _, guild := range recvMsg.Data.Guilds {
+					if guild.ID != guildID {
 						continue
 					}
-					voiceStates := guild.(map[string]interface{})["voice_states"].([]interface{})
-					for _, voiceState := range voiceStates {
-						voiceStateChannelID := voiceState.(map[string]interface{})["channel_id"].(string)
-						if voiceStateChannelID == channelID {
+					for _, voiceState := range guild.VoiceStates {
+						if voiceState.ChannelID == channelID {
 							userIsInChannel.Store(true)
 						}
 					}
 				}
 			} else if *recvMsg.Type == "READY" {
-				for _, user := range recvMsg.Data.(map[string]interface{})["users"].([]interface{}) {
-					userID := user.(map[string]interface{})["id"].(string)
-					username := user.(map[string]interface{})["username"].(string)
-					if avatar, ok := user.(map[string]interface{})["avatar"].(string); ok {
-						userInfoCache[userID] = UserInfo{
-							UserID:   userID,
-							Avatar:   avatar,
-							Username: username,
+				for _, user := range recvMsg.Data.Users {
+					if user.Avatar != "" {
+						userInfoCache[user.ID] = UserInfo{
+							UserID:   user.ID,
+							Avatar:   user.Avatar,
+							Username: user.Username,
 						}
 					}
 				}
-			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.(map[string]interface{})["guild_id"] == guildID {
+			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.GuildID == guildID {
 				newSounds := [soundboardSoundCount]SoundboardSound{}
 
 				emptyPositions := []int{}
@@ -659,18 +685,18 @@ func main() {
 				}
 
 				newUpdates := []SoundboardSoundWithOrdinal{}
-				for _, soundboardSound := range recvMsg.Data.(map[string]interface{})["soundboard_sounds"].([]interface{}) {
-					id := soundboardSound.(map[string]interface{})["sound_id"].(string)
-					name := soundboardSound.(map[string]interface{})["name"].(string)
-					userID := soundboardSound.(map[string]interface{})["user_id"].(string)
-					var avatar string
-					if userInfo, ok := soundboardSound.(map[string]interface{})["user"].(map[string]interface{}); ok {
-						avatar = userInfo["avatar"].(string)
+				for _, soundboardSound := range recvMsg.Data.SoundboardSounds {
+					id := soundboardSound.SoundID
+					name := soundboardSound.Name
+
+					userID := soundboardSound.UserID
+					if soundboardSound.User.Avatar != "" {
+						avatar := soundboardSound.User.Avatar
 						old := userInfoCache[userID]
 						old.Avatar = avatar
 						userInfoCache[userID] = old
 					}
-					newSound := SoundboardSound{Name: name, ID: id, UserID: userID, Avatar: avatar}
+					newSound := SoundboardSound{Name: name, ID: id, UserID: userID, Avatar: soundboardSound.User.Avatar}
 
 					// check if new sound is in sounds, if so place in same spot
 					if pos, ok := soundMap[newSound.ID]; ok { // sound was already present
@@ -705,11 +731,11 @@ func main() {
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
 				fetchSoundboardSounds()
 			} else if *recvMsg.Type == "VOICE_STATE_UPDATE" {
-				updateUserID := recvMsg.Data.(map[string]any)["user_id"].(string)
-				updateGuildID := recvMsg.Data.(map[string]any)["guild_id"].(string)
+				updateUserID := recvMsg.Data.UserID
+				updateGuildID := recvMsg.Data.GuildID
 				if updateUserID == discordClient.userID && guildID == updateGuildID {
-					updateChannelID, ok := recvMsg.Data.(map[string]any)["channel_id"].(string)
-					userIsInChannel.Store(ok && updateChannelID == channelID)
+					updateChannelID := recvMsg.Data.ChannelID
+					userIsInChannel.Store(updateChannelID == channelID)
 				}
 				// just force updates on all the sounds!
 				updates := make([]SoundboardSoundWithOrdinal, 0)
