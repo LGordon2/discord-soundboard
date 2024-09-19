@@ -283,22 +283,6 @@ func main() {
 			}
 		}
 
-		var buf bytes.Buffer
-
-		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-		for _, storedSound := range storedSounds {
-			storedSoundNoExt := strings.Split(storedSound, ".")[0]
-			// hide sounds already present on the sound map
-			if _, ok := storedSoundMap[storedSoundNoExt]; ok {
-				buf.WriteString(addSoundCardComponent(storedSound, guildID, false, true))
-			} else {
-				buf.WriteString(addSoundCardComponent(storedSound, guildID, false, false))
-			}
-		}
-		buf.WriteString("</div>")
-
-		msgUpdates <- buf.Bytes()
-
 		w.WriteHeader(http.StatusOK)
 	})
 
