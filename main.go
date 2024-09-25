@@ -190,6 +190,33 @@ func main() {
 		m.Minify("text/html", &minifiedBuf, &buf)
 		return minifiedBuf
 	}
+	updateStoredSounds := func(soundsWithOrdinal []SoundboardSoundWithOrdinal) *bytes.Buffer {
+		var buf bytes.Buffer = latestSoundUpdate(soundsWithOrdinal)
+		soundMap := make(map[string]bool)
+		hasEmpty := false
+		// This is used later to prune sounds that can be added or disables adding new sounds.
+		for _, sound := range sounds {
+			if sound == (SoundboardSound{}) {
+				hasEmpty = true
+				continue
+			}
+			soundMap[sound.Name] = true
+		}
+
+		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		for _, storedSound := range storedSounds {
+			storedSoundNoExt := strings.Split(storedSound, ".")[0]
+			// hide sounds already present on the sound map
+			if _, ok := soundMap[storedSoundNoExt]; ok {
+				buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty, true))
+			} else {
+				buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty, false))
+			}
+		}
+		buf.WriteString("</div>")
+		return &buf
+	}
+
 	go func() {
 		for newSounds := range soundUpdates {
 			buf := latestSoundUpdate(newSounds)
@@ -263,14 +290,18 @@ func main() {
 		}
 
 		soundboardSound := SoundboardSoundWithOrdinal{}
+		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
 		for i, sound := range sounds {
 			if sound.ID == soundID {
 				soundboardSound = SoundboardSoundWithOrdinal{
 					ordinal:         i,
 					SoundboardSound: sound,
 				}
-				break
 			}
+			soundsWithOrdinal = append(soundsWithOrdinal, SoundboardSoundWithOrdinal{
+				ordinal:         i,
+				SoundboardSound: sound,
+			})
 		}
 
 		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
@@ -281,6 +312,7 @@ func main() {
 					soundboardSound,
 				}
 			}
+			msgUpdates <- updateStoredSounds(soundsWithOrdinal).Bytes()
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -334,30 +366,7 @@ func main() {
 		buf.WriteString("</div>")
 		soundChan <- buf.Bytes()
 
-		buf = latestSoundUpdate(soundsWithOrdinal)
-		soundMap := make(map[string]bool)
-		hasEmpty := false
-		// This is used later to prune sounds that can be added or disables adding new sounds.
-		for _, sound := range sounds {
-			if sound == (SoundboardSound{}) {
-				hasEmpty = true
-				continue
-			}
-			soundMap[sound.Name] = true
-		}
-
-		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-		for _, storedSound := range storedSounds {
-			storedSoundNoExt := strings.Split(storedSound, ".")[0]
-			// hide sounds already present on the sound map
-			if _, ok := soundMap[storedSoundNoExt]; ok {
-				buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty, true))
-			} else {
-				buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty, false))
-			}
-		}
-		buf.WriteString("</div>")
-		soundChan <- buf.Bytes()
+		soundChan <- updateStoredSounds(soundsWithOrdinal).Bytes()
 
 		mu.Lock()
 		clients[c] = soundChan
