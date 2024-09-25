@@ -54,9 +54,9 @@ type DiscordMessageData struct {
 }
 
 type DiscordMessage struct {
-	Type    *string             `json:"t"`
-	GuildID *string             `json:"guild_id"`
-	Data    *DiscordMessageData `json:"d"`
+	Type    *string     `json:"t"`
+	GuildID *string     `json:"guild_id"`
+	Data    interface{} `json:"d"`
 }
 
 type SoundboardSound struct {
@@ -605,6 +605,23 @@ func main() {
 					close(recvMsgChan)
 					return
 				}
+
+				switch msg.Data.(type) {
+				case map[string]interface{}:
+					data, err := json.Marshal(msg.Data)
+					if err != nil {
+						close(recvMsgChan)
+						return
+					}
+					var dmd DiscordMessageData
+					err = json.Unmarshal(data, &dmd)
+					if err != nil {
+						close(recvMsgChan)
+						return
+					}
+					msg.Data = &dmd
+				}
+
 				recvMsgChan <- msg
 			}
 		}()
@@ -652,8 +669,13 @@ func main() {
 				continue
 			}
 
+			dmd, ok := recvMsg.Data.(*DiscordMessageData)
+			if !ok {
+				continue
+			}
+
 			if *recvMsg.Type == "READY_SUPPLEMENTAL" {
-				for _, guild := range recvMsg.Data.Guilds {
+				for _, guild := range dmd.Guilds {
 					if guild.ID != guildID {
 						continue
 					}
@@ -664,7 +686,7 @@ func main() {
 					}
 				}
 			} else if *recvMsg.Type == "READY" {
-				for _, user := range recvMsg.Data.Users {
+				for _, user := range dmd.Users {
 					if user.Avatar != "" {
 						userInfoCache[user.ID] = UserInfo{
 							UserID:   user.ID,
@@ -673,7 +695,7 @@ func main() {
 						}
 					}
 				}
-			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && recvMsg.Data.GuildID == guildID {
+			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && dmd.GuildID == guildID {
 				newSounds := [soundboardSoundCount]SoundboardSound{}
 
 				emptyPositions := []int{}
@@ -687,7 +709,7 @@ func main() {
 				}
 
 				newUpdates := []SoundboardSoundWithOrdinal{}
-				for _, soundboardSound := range recvMsg.Data.SoundboardSounds {
+				for _, soundboardSound := range dmd.SoundboardSounds {
 					id := soundboardSound.SoundID
 					name := soundboardSound.Name
 
@@ -733,10 +755,10 @@ func main() {
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
 				fetchSoundboardSounds()
 			} else if *recvMsg.Type == "VOICE_STATE_UPDATE" {
-				updateUserID := recvMsg.Data.UserID
-				updateGuildID := recvMsg.Data.GuildID
+				updateUserID := dmd.UserID
+				updateGuildID := dmd.GuildID
 				if updateUserID == discordClient.userID && guildID == updateGuildID {
-					updateChannelID := recvMsg.Data.ChannelID
+					updateChannelID := dmd.ChannelID
 					userIsInChannel.Store(updateChannelID == channelID)
 				}
 				// just force updates on all the sounds!
