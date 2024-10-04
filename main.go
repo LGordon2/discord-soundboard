@@ -207,11 +207,8 @@ func main() {
 		for _, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
 			// hide sounds already present on the sound map
-			if _, ok := soundMap[storedSoundNoExt]; ok {
-				buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty, true))
-			} else {
-				buf.WriteString(addSoundCardComponent(storedSound, guildID, !hasEmpty, false))
-			}
+			_, ok := soundMap[storedSoundNoExt]
+			buf.WriteString(addSoundCardComponent(storedSoundNoExt, guildID, !hasEmpty, ok))
 		}
 		buf.WriteString("</div>")
 		return &buf
