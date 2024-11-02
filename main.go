@@ -73,10 +73,10 @@ var (
 	soundsDir    string // where you store sounds on the server (e.g. /home/user/sounds/...)
 )
 
-const guildID = "284709094588284929"   // Viznet
-const channelID = "284709094588284930" // general channel
-// const guildID = "752332599631806505"   // Faceclub
-// const channelID = "752332599631806509" // general channel
+// const guildID = "284709094588284929"   // Viznet
+// const channelID = "284709094588284930" // general channel
+const guildID = "752332599631806505"   // Faceclub
+const channelID = "752332599631806509" // general channel
 
 const soundboardSoundCount = 8
 
@@ -209,6 +209,10 @@ func main() {
 			// hide sounds already present on the sound map
 			_, ok := soundMap[storedSoundNoExt]
 			buf.WriteString(addSoundCardComponent(storedSoundNoExt, guildID, !hasEmpty, ok))
+		}
+		for i := 0; i < 100; i++ {
+			// hide sounds already present on the sound map
+			buf.WriteString(addSoundCardComponent("dummy", guildID, !hasEmpty, true))
 		}
 		buf.WriteString("</div>")
 		return &buf
@@ -356,7 +360,7 @@ func main() {
 			waitChan <- struct{}{}
 		}()
 		var buf bytes.Buffer
-		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl sticky top-0 bg-white dark:bg-gray-900\">")
 		for i := 0; i < soundboardSoundCount; i++ {
 			buf.WriteString(fmt.Sprintf("<div id=\"soundboard-%d\"></div>", i))
 		}
