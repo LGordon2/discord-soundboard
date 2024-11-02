@@ -360,7 +360,7 @@ func main() {
 			waitChan <- struct{}{}
 		}()
 		var buf bytes.Buffer
-		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl sticky top-0 bg-white dark:bg-gray-900\">")
+		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl md:sticky md:top-0 md:bg-white md:dark:bg-gray-900\">")
 		for i := 0; i < soundboardSoundCount; i++ {
 			buf.WriteString(fmt.Sprintf("<div id=\"soundboard-%d\"></div>", i))
 		}
