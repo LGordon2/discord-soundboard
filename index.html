@@ -142,6 +142,29 @@
             playTimeouts[soundId] = timeoutId;
         }
 
+        const highlightSound2 = (elId, duration, soundId, color) => {
+            const el = document.querySelector('#' + elId)
+            if (!el) {
+                console.error('could not find ele ', elId)
+                return;
+            }
+
+            if (playTimeouts[soundId]) {
+                clearTimeout(playTimeouts[soundId]);
+            }
+            const classesToAdd = ['border-green-400']
+            const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
+
+            el.classList.add(...classesToAdd)
+            el.classList.remove(...classesToRemove)
+            console.log('running for duration ', soundId, elId, el, duration * 1000)
+            // const timeoutId = setTimeout(() => {
+            //     el.classList.add(...classesToRemove)
+            //     el.classList.remove(...classesToAdd)
+            // }, 4 * 1000)
+            // playTimeouts[soundId] = timeoutId;
+        }
+
         /**
          *    Mute sounds | Play send sounds | IsSendSound? || Sound played?
          * 1.     F       |  F               | F            || T
@@ -255,11 +278,11 @@
             document.querySelectorAll(".add-sound-component").forEach((el) => {
                 const soundName = el.getAttribute('data-soundname')
                 const splitSoundName = soundName.split('.')[0]
-                if (soundName && hiddenSounds.includes(splitSoundName)) { // should be hidden
-                    el.classList.add('hidden');
-                } else {
-                    el.classList.remove('hidden');
-                }
+                // if (soundName && hiddenSounds.includes(splitSoundName)) { // should be hidden
+                //     el.classList.add('hidden');
+                // } else {
+                //     el.classList.remove('hidden');
+                // }
                 disableFn(el.querySelector('button'))
             });
         }
@@ -279,6 +302,7 @@
                 }
             });
         };
+        window._highlightSound2 = highlightSound2;
         window._playSound = playSound;
         window._muteSounds = muteSounds;
         window._playSendSounds = playSendSounds;

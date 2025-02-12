@@ -8,6 +8,7 @@ import (
 var (
 	addSoundCardComponentTmpl *template.Template
 	soundCardComponentTmpl    *template.Template
+	soundCardComponent2Tmpl   *template.Template
 	uploadedByComponentTmpl   *template.Template
 )
 
@@ -35,6 +36,7 @@ const addSoundCardComponentTmplRaw = `
             <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
             </h5>
             <button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" hx-swap="none" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'plus')" hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}"></button>
+			<button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" hx-swap="none" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/quickplay2?soundLocation={{ .soundName }}&guildID={{ .guildID }}"></button>
         </div>
     </div>
 `
@@ -70,6 +72,26 @@ const soundCardComponentTmplRaw = `
         </div>
 `
 
+const soundCardComponent2TmplRaw = `
+<div id="soundboard-{{.ordinal}}" class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
+            <div class="flex flex-row">
+                <h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">{{.soundName}}
+                </h5>
+                <div class="shrink mb-2">
+                    <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'save')" class="enabled:text-blue-500 disabled:text-gray-500"
+                        hx-post="">
+                    </button>
+                </div>
+                <a disabled class="shrink text-blue-500 ml-1" href="" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'download'); new Audio(this.href)"></a>
+            </div>
+
+            <div class="flex flex-row divide-x divide-gray-700">
+                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')" class="flex flex-1 items-center justify-center mt-1"></button>
+                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/quickplay2?soundLocation={{.soundName}}" hx-on:click="window._highlightSound2('soundboard-{{.ordinal}}', {{.duration}}, '{{.soundName}}', 'blue')" hx-swap="none" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"></button>
+            </div>
+        </div>
+`
+
 func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool, deleteButton any) string {
 	var builder strings.Builder
 	used := id != "" && name != "" && deleteButton != nil
@@ -84,6 +106,21 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 		"used":         used,
 	}
 	err := soundCardComponentTmpl.Execute(&builder, m)
+	if err != nil {
+		panic(err)
+	}
+	return builder.String()
+}
+
+func soundCardComponent2(ordinal int, storedSound, guildID string, duration float64) string {
+	var builder strings.Builder
+	m := map[string]any{
+		"ordinal":   ordinal,
+		"soundName": storedSound,
+		"guildID":   guildID,
+		"duration":  duration,
+	}
+	err := soundCardComponent2Tmpl.Execute(&builder, m)
 	if err != nil {
 		panic(err)
 	}
@@ -121,5 +158,6 @@ func uploadedByComponent(username, avatarCDN string) string {
 func init() {
 	addSoundCardComponentTmpl = template.Must(template.New("addSoundCardComponentTmpl").Parse(addSoundCardComponentTmplRaw))
 	soundCardComponentTmpl = template.Must(template.New("soundCardComponentTmpl").Parse(soundCardComponentTmplRaw))
+	soundCardComponent2Tmpl = template.Must(template.New("soundCardComponentTmpl").Parse(soundCardComponent2TmplRaw))
 	uploadedByComponentTmpl = template.Must(template.New("uploadedByComponentTmpl").Parse(uploadedByComponentTmplRaw))
 }

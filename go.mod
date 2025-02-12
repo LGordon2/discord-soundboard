@@ -6,6 +6,7 @@ require (
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/segmentio/encoding v0.4.0
+	github.com/tcolgate/mp3 v0.0.0-20170426193717-e79c5a46d300
 	github.com/tdewolff/minify v2.3.6+incompatible
 )
 

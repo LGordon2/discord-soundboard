@@ -23,7 +23,7 @@ type addSoundInput struct {
 	SoundLocation string `json:"soundLocation"`
 }
 
-func addSound(discordClient *DiscordRestClient, storedSoundMap map[string][]byte, input addSoundInput) error {
+func addSound(discordClient *DiscordRestClient, storedSoundMap map[string][]byte, input addSoundInput) (CreateSoundboardSoundResponse, error) {
 	soundLocation := input.SoundLocation
 	nameWithoutExt := strings.Split(soundLocation, ".")[0]
 	var data []byte
@@ -32,7 +32,7 @@ func addSound(discordClient *DiscordRestClient, storedSoundMap map[string][]byte
 	} else {
 		fileData, err := os.ReadFile(path.Join(soundsDir, soundLocation))
 		if err != nil {
-			return fmt.Errorf("[error] trouble reading file %s", soundLocation)
+			return CreateSoundboardSoundResponse{}, fmt.Errorf("[error] trouble reading file %s", soundLocation)
 		}
 		data = fileData
 	}
@@ -44,9 +44,9 @@ func addSound(discordClient *DiscordRestClient, storedSoundMap map[string][]byte
 	name := arr[0]
 	extension := arr[len(arr)-1]
 
-	_, err := discordClient.CreateSoundboardSound(guildID, name, "audio/"+extension, data)
+	resp, err := discordClient.CreateSoundboardSound(guildID, name, "audio/"+extension, data)
 	if err != nil {
-		return fmt.Errorf("[error] creating soundboard sound for %s %v", soundLocation, err)
+		return CreateSoundboardSoundResponse{}, fmt.Errorf("[error] creating soundboard sound for %s %v", soundLocation, err)
 	}
-	return nil
+	return resp, nil
 }

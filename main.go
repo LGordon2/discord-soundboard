@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/encoding/json"
+	"github.com/tcolgate/mp3"
 	"github.com/tdewolff/minify"
 	"github.com/tdewolff/minify/html"
 )
@@ -73,10 +75,10 @@ var (
 	soundsDir    string // where you store sounds on the server (e.g. /home/user/sounds/...)
 )
 
-const guildID = "284709094588284929"   // Viznet
-const channelID = "284709094588284930" // general channel
-// const guildID = "752332599631806505"   // Faceclub
-// const channelID = "752332599631806509" // general channel
+// const guildID = "284709094588284929"   // Viznet
+// const channelID = "284709094588284930" // general channel
+const guildID = "752332599631806505"   // Faceclub
+const channelID = "752332599631806509" // general channel
 
 const soundboardSoundCount = 8
 
@@ -98,7 +100,32 @@ func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) s
 	return fmt.Sprintf(`<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'minus')" class="flex flex-1 peer items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s></button>%s`, textColor, soundId, guildId, disabledProp, hiddenTooltip)
 }
 
-func fetchStoredSounds() ([]string, map[string][]byte, error) {
+func mp3Duration(data []byte) (time.Duration, error) {
+	var t float64
+	d := mp3.NewDecoder(bytes.NewBuffer(data))
+	var f mp3.Frame
+	skipped := 0
+
+	for {
+
+		if err := d.Decode(&f, &skipped); err != nil {
+			if err == io.EOF {
+				break
+			}
+			fmt.Println(err)
+			return time.Duration(0), err
+		}
+
+		t = t + f.Duration().Seconds()
+	}
+
+	// Convert the value to a time.Duration object
+	duration := time.Duration(t * float64(time.Second))
+	fmt.Fprintf(os.Stdout, "worked! %v\n", duration)
+	return duration, nil
+}
+
+func fetchStoredSounds() ([]string, map[string][]byte, []float64, error) {
 	files, err := os.ReadDir(soundsDir)
 	if err != nil {
 		panic(err)
@@ -106,6 +133,7 @@ func fetchStoredSounds() ([]string, map[string][]byte, error) {
 	sort.Slice(files, func(i, j int) bool { return strings.ToLower(files[i].Name()) < strings.ToLower(files[j].Name()) })
 
 	storedSounds := []string{}
+	storedSoundDurations := []float64{}
 	storedSoundMap := make(map[string][]byte) // these won't contain the extension
 	for _, f := range files {
 		if !(strings.HasSuffix(f.Name(), ".ogg") || strings.HasSuffix(f.Name(), ".mp3")) {
@@ -116,12 +144,21 @@ func fetchStoredSounds() ([]string, map[string][]byte, error) {
 		data, err := os.ReadFile(path.Join(soundsDir, f.Name()))
 		if err == nil {
 			storedSoundMap[nameWithoutExt] = data
+			duration, err := mp3Duration(data)
+			if err == nil {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
+				storedSoundDurations = append(storedSoundDurations, duration.Seconds())
+			} else {
+				storedSoundDurations = append(storedSoundDurations, 0.0)
+			}
 		} else {
 			storedSoundMap[nameWithoutExt] = []byte{}
+			storedSoundDurations = append(storedSoundDurations, 0.0)
+
 			fmt.Printf("[warn] couldn't prefetch file %s\n", f.Name())
 		}
 	}
-	return storedSounds, storedSoundMap, nil
+	return storedSounds, storedSoundMap, storedSoundDurations, nil
 }
 
 type SoundboardSoundWithOrdinal struct {
@@ -145,7 +182,7 @@ func main() {
 	userIsInChannel.Store(false)
 	var mu sync.RWMutex
 	sounds := [soundboardSoundCount]SoundboardSound{}
-	storedSounds, storedSoundMap, err := fetchStoredSounds()
+	storedSounds, storedSoundMap, storedSoundDurations, err := fetchStoredSounds()
 	if err != nil {
 		panic(err)
 	}
@@ -157,16 +194,16 @@ func main() {
 	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
 		var buf bytes.Buffer
 		// write updates for new sounds
-		for _, sound := range newSounds {
-			if sound.SoundboardSound == (SoundboardSound{}) {
-				buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, true, nil))
-			}
-			disabled := sound.UserID != discordClient.userID
-			_, cannotSave := storedSoundMap[sound.Name]
-			userInfo := userInfoCache[sound.UserID]
-			avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
-			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
-		}
+		// for _, sound := range newSounds {
+		// 	if sound.SoundboardSound == (SoundboardSound{}) {
+		// 		buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, true, nil))
+		// 	}
+		// 	disabled := sound.UserID != discordClient.userID
+		// 	_, cannotSave := storedSoundMap[sound.Name]
+		// 	userInfo := userInfoCache[sound.UserID]
+		// 	avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
+		// 	buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
+		// }
 
 		hasEmpty := false
 		hiddenSounds := make([]string, 0)
@@ -192,23 +229,11 @@ func main() {
 	}
 	updateStoredSounds := func(soundsWithOrdinal []SoundboardSoundWithOrdinal) *bytes.Buffer {
 		var buf bytes.Buffer = latestSoundUpdate(soundsWithOrdinal)
-		soundMap := make(map[string]bool)
-		hasEmpty := false
-		// This is used later to prune sounds that can be added or disables adding new sounds.
-		for _, sound := range sounds {
-			if sound == (SoundboardSound{}) {
-				hasEmpty = true
-				continue
-			}
-			soundMap[sound.Name] = true
-		}
-
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-		for _, storedSound := range storedSounds {
+		for i, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
 			// hide sounds already present on the sound map
-			_, ok := soundMap[storedSoundNoExt]
-			buf.WriteString(addSoundCardComponent(storedSoundNoExt, guildID, !hasEmpty, ok))
+			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, storedSoundDurations[i]))
 		}
 		buf.WriteString("</div>")
 		return &buf
@@ -301,8 +326,9 @@ func main() {
 			})
 		}
 
-		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
+		if newStoredSounds, newStoredSoundMap, newStoredSoundDurations, err := fetchStoredSounds(); err == nil {
 			storedSounds = newStoredSounds
+			storedSoundDurations = newStoredSoundDurations
 			storedSoundMap = newStoredSoundMap
 			if soundboardSound != (SoundboardSoundWithOrdinal{}) {
 				soundUpdates <- []SoundboardSoundWithOrdinal{
@@ -463,7 +489,7 @@ func main() {
 			}
 		}
 
-		err = addSound(discordClient, storedSoundMap, input.Add)
+		_, err = addSound(discordClient, storedSoundMap, input.Add)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(os.Stderr, "[error] adding during swap: %v\n", err)
@@ -487,7 +513,7 @@ func main() {
 	}))
 	http.HandleFunc("/add-sound", func(w http.ResponseWriter, r *http.Request) {
 		soundLocation := r.URL.Query().Get("soundLocation")
-		err := addSound(discordClient, storedSoundMap, addSoundInput{
+		_, err := addSound(discordClient, storedSoundMap, addSoundInput{
 			SoundLocation: soundLocation,
 		})
 		if err != nil {
@@ -510,6 +536,64 @@ func main() {
 		buf.WriteString("</ul>")
 		w.Write(buf.Bytes())
 	}))
+	http.HandleFunc("/quickplay2", func(w http.ResponseWriter, r *http.Request) {
+		soundLocation := r.URL.Query().Get("soundLocation")
+		if soundLocation == "" {
+			w.WriteHeader(400)
+			return
+		}
+
+		soundId := ""
+		mySounds := []SoundboardSound{}
+		for _, sound := range sounds {
+			if sound.Name == soundLocation {
+				soundId = sound.ID
+				break
+			} else if sound.UserID == discordClient.userID {
+				mySounds = append(mySounds, sound)
+			}
+		}
+
+		if soundId != "" {
+			err := discordClient.SendSoundboardSound(guildID, channelID, soundId)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
+				w.WriteHeader(500)
+			} else {
+				fmt.Fprintf(os.Stdout, "sending stored sound: %v\n", soundId)
+				w.WriteHeader(202)
+			}
+			return
+		}
+
+		randomSound := mySounds[rand.Intn(len(mySounds))]
+		err = discordClient.DeleteSoundboardSound(guildID, randomSound.ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
+			w.WriteHeader(500)
+			return
+		}
+
+		resp, err := addSound(discordClient, storedSoundMap, addSoundInput{
+			SoundLocation: soundLocation,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		fmt.Fprintf(os.Stdout, "added new stored sound: %v\n", resp)
+
+		err = discordClient.SendSoundboardSound(guildID, channelID, resp.SoundID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
+			w.WriteHeader(500)
+			return
+		}
+
+		fmt.Fprintf(os.Stdout, "sending new stored sound: %v\n", resp.SoundID)
+		w.WriteHeader(202)
+	})
 	http.HandleFunc("/quickplay", func(w http.ResponseWriter, r *http.Request) {
 		soundId := ""
 		for _, sound := range sounds {
@@ -582,7 +666,9 @@ func main() {
 	go func() {
 		port := "3000"
 		fmt.Printf("starting http server on localhost:%s...\n", port)
-		err := http.ListenAndServe("0.0.0.0:"+port, http.DefaultServeMux)
+		host := "0.0.0.0:"
+		host = "127.0.0.1:"
+		err := http.ListenAndServe(host+port, http.DefaultServeMux)
 		if err != nil {
 			panic(err)
 		}
