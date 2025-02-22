@@ -150,12 +150,11 @@ func fetchStoredSounds() ([]string, map[string][]byte, []float64, error) {
 			storedSoundMap[nameWithoutExt] = data
 			duration, err := mp3Duration(path.Join(soundsDir, f.Name()))
 			if err == nil {
-				fmt.Fprintf(os.Stdout, "duration %v\n", duration)
-				storedSoundDurations = append(storedSoundDurations, duration.Seconds())
+				fmt.Fprintf(os.Stdout, "%v, duration %v\n", f.Name(), duration)
 			} else {
 				fmt.Fprintf(os.Stderr, "%v\n", err)
-				storedSoundDurations = append(storedSoundDurations, 0.0)
 			}
+			storedSoundDurations = append(storedSoundDurations, duration.Seconds())
 		} else {
 			storedSoundMap[nameWithoutExt] = []byte{}
 			storedSoundDurations = append(storedSoundDurations, 0.0)
