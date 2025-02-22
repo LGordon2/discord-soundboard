@@ -195,8 +195,10 @@
             });
         }
 
-        const playSound2 = (el) => {
-            const audioData = el.getAttribute('data-sound-data')
+        const playSound2 = (elId) => {
+            const el = document.getElementById(elId)
+
+            const audioData = el.getAttribute('href')
             const audio = new Audio(audioData)
             audio.addEventListener("canplaythrough", (event) => {
                 if (el) {

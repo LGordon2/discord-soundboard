@@ -83,11 +83,11 @@ const soundCardComponent2TmplRaw = `
 					hx-post="">
 				</button>
 			</div>
-			<a class="shrink text-gray-500 pointer-events-none ml-1" href="" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'download'); new Audio(this.href)"></a>
+			<a id="soundboard-{{.ordinal}}-href" class="shrink text-blue-500 ml-1" download="{{.soundName}}.mp3" href="data:audio/mp3;base64,{{.soundData}}" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'download'); new Audio(this.href)"></a>
 		</div>
 
 		<div class="flex flex-row divide-x divide-gray-700">
-			<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')" hx-on:click="window._playSound2(this)" data-sound-data="data:audio/mp3;base64,{{.soundData}}" class="flex flex-1 items-center justify-center mt-1"></button>
+			<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')" hx-on:click="window._playSound2('soundboard-{{.ordinal}}-href')" class="flex flex-1 items-center justify-center mt-1"></button>
 			<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/quickplay2?soundLocation={{.soundName}}" hx-on:click="window._highlightSound2('soundboard-{{.ordinal}}', {{.duration}})" hx-swap="none" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"></button>
 		</div>
 	</div>
