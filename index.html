@@ -176,16 +176,21 @@
          * 
          * The second parameter indicates that the sound was sent through the websocket.
          */
-        const playSound = (elId, soundId, sent) => {
+        const playSound = (ordinal, sent, useCdn) => {
             sent = sent === undefined ? false : sent
-            const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
-            let el = undefined;
-            if (elId) {
-                el = document.querySelector('#' + elId)
+            let linkElement = undefined;
+            if (ordinal) {
+                linkElement = document.querySelector(`#soundboard-${ordinal}-download-link`)
+            }
+            let audio
+            if (linkElement) {
+                const audioData = linkElement.getAttribute('href')
+                audio = new Audio(audioData)
             }
             audio.addEventListener("canplaythrough", () => {
-                if (el) {
-                    highlightSound(el, audio, soundId)
+                const soundcardElement = document.querySelector(`#soundboard-${ordinal}`)
+                if (soundcardElement) {
+                    highlightSound(soundcardElement, audio, ordinal)
                 }
                 if (!muted.state) {
                     if (!sent || sent && shouldPlaySendSounds.state) {
@@ -304,16 +309,16 @@
         window._makeDraggable = makeDraggable;
         window._makeDroppable = makeDroppable;
         // TODO this is pretty much the same as play sound
-        window._highlightSound = (elId, soundId) => {
-            const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
-            let el = undefined;
-            if (elId) {
-                el = document.querySelector('#' + elId)
+        window._highlightSound = (ordinal) => {
+            let linkElement = document.querySelector(`#soundboard-${ordinal}-download-link`)
+            let audio
+            if (linkElement) {
+                const audioData = linkElement.getAttribute('href')
+                audio = new Audio(audioData)
             }
             audio.addEventListener("canplaythrough", () => {
-                if (el) {
-                    highlightSound(el, audio, soundId)
-                }
+                const el = document.querySelector(`#soundboard-${ordinal}`)
+                highlightSound(el, audio, ordinal)
             });
         };
         window._highlightSound2 = highlightSound2;

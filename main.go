@@ -238,7 +238,7 @@ func main() {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
 			soundData := storedSoundMap[storedSoundNoExt]
 			// hide sounds already present on the sound map
-			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, storedSoundDurations[i], soundData))
+			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, storedSoundDurations[i], userIsInChannel.Load(), soundData))
 		}
 		buf.WriteString("</div>")
 		return &buf
@@ -386,13 +386,6 @@ func main() {
 			}
 			waitChan <- struct{}{}
 		}()
-		var buf bytes.Buffer
-		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-		// for i := 0; i < soundboardSoundCount; i++ {
-		// 	buf.WriteString(fmt.Sprintf("<div id=\"soundboard-%d\"></div>", i))
-		// }
-		buf.WriteString("</div>")
-		soundChan <- buf.Bytes()
 
 		soundChan <- updateStoredSounds(soundsWithOrdinal).Bytes()
 
@@ -541,7 +534,7 @@ func main() {
 		buf.WriteString("</ul>")
 		w.Write(buf.Bytes())
 	}))
-	http.HandleFunc("/quickplay2", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/quickplay", func(w http.ResponseWriter, r *http.Request) {
 		soundLocation := r.URL.Query().Get("soundLocation")
 		if soundLocation == "" {
 			w.WriteHeader(400)
@@ -598,75 +591,6 @@ func main() {
 
 		fmt.Fprintf(os.Stdout, "sending new stored sound: %v\n", resp.SoundID)
 		w.WriteHeader(202)
-	})
-	http.HandleFunc("/quickplay", func(w http.ResponseWriter, r *http.Request) {
-		soundId := ""
-		for _, sound := range sounds {
-			if sound.Name == "NoOneHeard" {
-				soundId = sound.ID
-				break
-			}
-		}
-		if soundId == "" {
-			fmt.Fprintf(os.Stderr, "could not find NoOneHeard sound replacement\n")
-			w.WriteHeader(500)
-			return
-		}
-
-		err := discordClient.DeleteSoundboardSound(guildID, soundId) // there is no bathroom
-		if err != nil {
-			panic(err)
-		}
-
-		soundLocation := r.URL.Query().Get("soundLocation")
-		data, err := os.ReadFile("/Users/lew/repos/discord-soundboard/sounds/" + soundLocation)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "[error] trouble reading file %s\n", soundLocation)
-			return
-		}
-
-		arr := strings.Split(soundLocation, "/")
-		nameAndExt := arr[len(arr)-1]
-
-		arr = strings.Split(nameAndExt, ".")
-		name := arr[0]
-		extension := arr[len(arr)-1]
-
-		soundboardResponse, err := discordClient.CreateSoundboardSound(guildID, name, "audio/"+extension, data)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "[error] creating soundboard sound for %s %v\n", soundLocation, err)
-			return
-		}
-
-		err = discordClient.SendSoundboardSound(guildID, channelID, soundboardResponse.SoundID)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "[error] send soundboard sound for %s %v\n", soundboardResponse.SoundID, err)
-			return
-		}
-
-		err = discordClient.DeleteSoundboardSound(guildID, soundboardResponse.SoundID) // there is no bathroom
-		if err != nil {
-			panic(err)
-		}
-
-		data, err = os.ReadFile("/Users/lew/repos/discord-soundboard/sounds/NoOneHeard.ogg")
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "[error] trouble reading file %s\n", soundLocation)
-			return
-		}
-
-		_, err = discordClient.CreateSoundboardSound(guildID, "NoOneHeard", "audio/ogg", data)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "[error] creating soundboard sound for %s %v\n", soundLocation, err)
-			return
-		}
-
-		w.Write([]byte(fmt.Sprintf("<script type=\"text/javascript\">new Audio('http://localhost:3000/sounds/%s.%s').play();</script>", name, extension)))
 	})
 	go func() {
 		port := "3000"

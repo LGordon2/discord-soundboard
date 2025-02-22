@@ -76,19 +76,30 @@ const soundCardComponentTmplRaw = `
 const soundCardComponent2TmplRaw = `
 <div id="soundboard-{{.ordinal}}" class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700">
 		<div class="flex flex-row">
-			<h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">{{.soundName}}
-			</h5>
-			<div class="shrink mb-2">
-				<button disabled hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'save')" class="enabled:text-blue-500 disabled:text-gray-500"
-					hx-post="">
-				</button>
-			</div>
-			<a id="soundboard-{{.ordinal}}-href" class="shrink text-blue-500 ml-1" download="{{.soundName}}.mp3" href="data:audio/mp3;base64,{{.soundData}}" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'download'); new Audio(this.href)"></a>
+			<h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">{{.soundName}}</h5>
+			<a
+				id="soundboard-{{.ordinal}}-download-link"
+				class="shrink text-blue-500 ml-1"
+				download="{{.soundName}}.mp3"
+				href="data:audio/mp3;base64,{{.soundData}}"
+				hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'download')">
+			</a>
 		</div>
 
 		<div class="flex flex-row divide-x divide-gray-700">
-			<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')" hx-on:click="window._playSound2('soundboard-{{.ordinal}}-href')" class="flex flex-1 items-center justify-center mt-1"></button>
-			<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/quickplay2?soundLocation={{.soundName}}" hx-on:click="window._highlightSound2('soundboard-{{.ordinal}}', {{.duration}})" hx-swap="none" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"></button>
+			<button
+				hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')"
+				hx-on:click="window._playSound('{{.ordinal}}')"
+				class="flex flex-1 items-center justify-center mt-1">
+			</button>
+			<button
+				hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')"
+				hx-post="/quickplay?soundLocation={{.soundName}}"
+				hx-on:click="window._highlightSound('{{.ordinal}}')"
+				hx-swap="none"
+				class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"
+				{{if not .canSend}}disabled="true"{{end}}>
+			</button>
 		</div>
 	</div>
 `
@@ -113,13 +124,14 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 	return builder.String()
 }
 
-func soundCardComponent2(ordinal int, storedSound, guildID string, duration float64, soundData []byte) string {
+func soundCardComponent2(ordinal int, storedSound, guildID string, duration float64, canSend bool, soundData []byte) string {
 	var builder strings.Builder
 	m := map[string]any{
 		"ordinal":   ordinal,
 		"soundName": storedSound,
 		"guildID":   guildID,
 		"duration":  duration,
+		"canSend":   canSend,
 		"soundData": base64.StdEncoding.EncodeToString(soundData),
 	}
 	err := soundCardComponent2Tmpl.Execute(&builder, m)
