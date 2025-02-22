@@ -10,8 +10,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,7 +21,6 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/segmentio/encoding/json"
-	"github.com/tcolgate/mp3"
 	"github.com/tdewolff/minify"
 	"github.com/tdewolff/minify/html"
 )
@@ -100,29 +101,32 @@ func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) s
 	return fmt.Sprintf(`<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'minus')" class="flex flex-1 peer items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s></button>%s`, textColor, soundId, guildId, disabledProp, hiddenTooltip)
 }
 
-func mp3Duration(data []byte) (time.Duration, error) {
-	var t float64
-	d := mp3.NewDecoder(bytes.NewBuffer(data))
-	var f mp3.Frame
-	skipped := 0
-
-	for {
-
-		if err := d.Decode(&f, &skipped); err != nil {
-			if err == io.EOF {
-				break
-			}
-			fmt.Println(err)
-			return time.Duration(0), err
-		}
-
-		t = t + f.Duration().Seconds()
+func mp3Duration(filepath string) (time.Duration, error) {
+	cmd := exec.Command("ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", filepath)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return time.Duration(0), err
 	}
-
-	// Convert the value to a time.Duration object
-	duration := time.Duration(t * float64(time.Second))
-	fmt.Fprintf(os.Stdout, "worked! %v\n", duration)
-	return duration, nil
+	if err := cmd.Start(); err != nil {
+		return time.Duration(0), err
+	}
+	var ffmpegOutput struct {
+		Format struct {
+			Filename string `json:"filename"`
+			Duration string `json:"duration"`
+		} `json:"format"`
+	}
+	if err := json.NewDecoder(stdout).Decode(&ffmpegOutput); err != nil {
+		return time.Duration(0), err
+	}
+	if err := cmd.Wait(); err != nil {
+		return time.Duration(0), err
+	}
+	durationFloat, err := strconv.ParseFloat(ffmpegOutput.Format.Duration, 64)
+	if err != nil {
+		return time.Duration(0), err
+	}
+	return time.Duration(durationFloat * 1e9), nil
 }
 
 func fetchStoredSounds() ([]string, map[string][]byte, []float64, error) {
@@ -144,11 +148,12 @@ func fetchStoredSounds() ([]string, map[string][]byte, []float64, error) {
 		data, err := os.ReadFile(path.Join(soundsDir, f.Name()))
 		if err == nil {
 			storedSoundMap[nameWithoutExt] = data
-			duration, err := mp3Duration(data)
+			duration, err := mp3Duration(path.Join(soundsDir, f.Name()))
 			if err == nil {
-				fmt.Fprintf(os.Stderr, "%v\n", err)
+				fmt.Fprintf(os.Stdout, "duration %v\n", duration)
 				storedSoundDurations = append(storedSoundDurations, duration.Seconds())
 			} else {
+				fmt.Fprintf(os.Stderr, "%v\n", err)
 				storedSoundDurations = append(storedSoundDurations, 0.0)
 			}
 		} else {
