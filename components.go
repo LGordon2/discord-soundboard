@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"strings"
 	"text/template"
 )
@@ -86,8 +87,8 @@ const soundCardComponent2TmplRaw = `
             </div>
 
             <div class="flex flex-row divide-x divide-gray-700">
-                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')" class="flex flex-1 items-center justify-center mt-1"></button>
-                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/quickplay2?soundLocation={{.soundName}}" hx-on:click="window._highlightSound2('soundboard-{{.ordinal}}', {{.duration}}, '{{.soundName}}', 'blue')" hx-swap="none" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"></button>
+                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')" hx-on:click="window._playSound2(this)" data-sound-data="data:audio/mp3;base64,{{.soundData}}" class="flex flex-1 items-center justify-center mt-1"></button>
+                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/quickplay2?soundLocation={{.soundName}}" hx-on:click="window._highlightSound2('soundboard-{{.ordinal}}', {{.duration}})" hx-swap="none" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"></button>
             </div>
         </div>
 `
@@ -112,13 +113,14 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 	return builder.String()
 }
 
-func soundCardComponent2(ordinal int, storedSound, guildID string, duration float64) string {
+func soundCardComponent2(ordinal int, storedSound, guildID string, duration float64, soundData []byte) string {
 	var builder strings.Builder
 	m := map[string]any{
 		"ordinal":   ordinal,
 		"soundName": storedSound,
 		"guildID":   guildID,
 		"duration":  duration,
+		"soundData": base64.StdEncoding.EncodeToString(soundData),
 	}
 	err := soundCardComponent2Tmpl.Execute(&builder, m)
 	if err != nil {

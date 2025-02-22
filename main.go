@@ -232,8 +232,9 @@ func main() {
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		for i, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
+			soundData := storedSoundMap[storedSoundNoExt]
 			// hide sounds already present on the sound map
-			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, storedSoundDurations[i]))
+			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, storedSoundDurations[i], soundData))
 		}
 		buf.WriteString("</div>")
 		return &buf
@@ -383,9 +384,9 @@ func main() {
 		}()
 		var buf bytes.Buffer
 		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
-		for i := 0; i < soundboardSoundCount; i++ {
-			buf.WriteString(fmt.Sprintf("<div id=\"soundboard-%d\"></div>", i))
-		}
+		// for i := 0; i < soundboardSoundCount; i++ {
+		// 	buf.WriteString(fmt.Sprintf("<div id=\"soundboard-%d\"></div>", i))
+		// }
 		buf.WriteString("</div>")
 		soundChan <- buf.Bytes()
 

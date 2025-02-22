@@ -142,12 +142,14 @@
             playTimeouts[soundId] = timeoutId;
         }
 
-        const highlightSound2 = (elId, duration, soundId, color) => {
+        const highlightSound2 = (elId, duration) => {
             const el = document.querySelector('#' + elId)
             if (!el) {
                 console.error('could not find ele ', elId)
                 return;
             }
+
+            const soundId = elId
 
             if (playTimeouts[soundId]) {
                 clearTimeout(playTimeouts[soundId]);
@@ -157,12 +159,11 @@
 
             el.classList.add(...classesToAdd)
             el.classList.remove(...classesToRemove)
-            console.log('running for duration ', soundId, elId, el, duration * 1000)
-            // const timeoutId = setTimeout(() => {
-            //     el.classList.add(...classesToRemove)
-            //     el.classList.remove(...classesToAdd)
-            // }, 4 * 1000)
-            // playTimeouts[soundId] = timeoutId;
+            const timeoutId = setTimeout(() => {
+                el.classList.add(...classesToRemove)
+                el.classList.remove(...classesToAdd)
+            }, duration * 1000)
+            playTimeouts[soundId] = timeoutId;
         }
 
         /**
@@ -191,6 +192,17 @@
                         audio.play()
                     }
                 }
+            });
+        }
+
+        const playSound2 = (el) => {
+            const audioData = el.getAttribute('data-sound-data')
+            const audio = new Audio(audioData)
+            audio.addEventListener("canplaythrough", (event) => {
+                if (el) {
+                    highlightSound(el.parentNode.parentNode, audio, el.parentNode.parentNode.getAttribute("id"))
+                }
+                audio.play()
             });
         }
 
@@ -304,6 +316,7 @@
         };
         window._highlightSound2 = highlightSound2;
         window._playSound = playSound;
+        window._playSound2 = playSound2;
         window._muteSounds = muteSounds;
         window._playSendSounds = playSendSounds;
         window._iconLoad = iconLoad;
