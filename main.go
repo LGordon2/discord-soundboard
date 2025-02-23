@@ -624,7 +624,7 @@ func main() {
 		port := "3000"
 		fmt.Printf("starting http server on localhost:%s...\n", port)
 		host := "0.0.0.0:"
-		host = "127.0.0.1:"
+		// host = "127.0.0.1:"
 		err := http.ListenAndServe(host+port, http.DefaultServeMux)
 		if err != nil {
 			panic(err)
