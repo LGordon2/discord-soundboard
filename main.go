@@ -54,6 +54,8 @@ type DiscordMessageData struct {
 	Users            []UserData  `json:"users"`
 	GuildID          string      `json:"guild_id"`
 	SoundboardSounds []SoundData `json:"soundboard_sounds"`
+	Name             string      `json:"name"`
+	SoundID          string      `json:"sound_id"`
 }
 
 type DiscordMessage struct {
@@ -280,18 +282,11 @@ func main() {
 		}
 		mu.RUnlock()
 	})
-	http.HandleFunc("/save-sound", func(w http.ResponseWriter, r *http.Request) {
-		soundID := r.URL.Query().Get("soundID")
-		soundName := r.URL.Query().Get("soundName")
-		if soundID == "" || soundName == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
+	saveSoundFunc := func(soundID, soundName string) error {
 		resp, err := http.DefaultClient.Get("https://cdn.discordapp.com/soundboard-sounds/" + soundID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[error] saving file: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		contentType := resp.Header.Get("Content-Type")
@@ -306,15 +301,13 @@ func main() {
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[error] saving file, could not read response body: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		err = os.WriteFile(path.Join(soundsDir, soundName+"."+extension), data, 0644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[error] saving file, could not write to disk: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		soundboardSound := SoundboardSoundWithOrdinal{}
@@ -343,7 +336,19 @@ func main() {
 			}
 			msgUpdates <- updateStoredSounds(soundsWithOrdinal).Bytes()
 		}
-
+		return nil
+	}
+	http.HandleFunc("/save-sound", func(w http.ResponseWriter, r *http.Request) {
+		soundID := r.URL.Query().Get("soundID")
+		soundName := r.URL.Query().Get("soundName")
+		if soundID == "" || soundName == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err := saveSoundFunc(soundID, soundName); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -619,7 +624,7 @@ func main() {
 		port := "3000"
 		fmt.Printf("starting http server on localhost:%s...\n", port)
 		host := "0.0.0.0:"
-		// host = "127.0.0.1:"
+		host = "127.0.0.1:"
 		err := http.ListenAndServe(host+port, http.DefaultServeMux)
 		if err != nil {
 			panic(err)
@@ -788,6 +793,11 @@ func main() {
 						newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
 							ordinal: i,
 						})
+					} else {
+						// auto save new sounds
+						if _, ok := storedSoundMap[newSound.Name]; !ok {
+							saveSoundFunc(newSound.ID, newSound.Name)
+						}
 					}
 				}
 				sounds = newSounds
@@ -796,7 +806,7 @@ func main() {
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
 				fetchSoundboardSounds()
 			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" {
-				json.NewEncoder(os.Stdout).Encode(recvMsg)
+				json.NewEncoder(os.Stdout).Encode(recvMsg.Data)
 				fetchSoundboardSounds()
 			} else if *recvMsg.Type == "VOICE_STATE_UPDATE" {
 				updateUserID := dmd.UserID
