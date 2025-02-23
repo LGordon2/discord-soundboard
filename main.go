@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -514,6 +515,8 @@ func main() {
 		w.Write(buf.Bytes())
 	}))
 	http.HandleFunc("/quickplay", func(w http.ResponseWriter, r *http.Request) {
+		timeoutCtx, _ := context.WithTimeout(r.Context(), 5*time.Second)
+		r = r.WithContext(timeoutCtx)
 		soundLocation := r.URL.Query().Get("soundLocation")
 		ordinal := r.URL.Query().Get("ordinal")
 		if soundLocation == "" || ordinal == "" {
