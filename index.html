@@ -7,7 +7,6 @@
     <title>Discord Soundboard</title>
     <link rel="shortcut icon" href="/headset.png" type="image/x-icon">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/DragDropTouch.js"></script>
 </head>
 
 <body class="bg-white dark:bg-gray-900">
@@ -132,7 +131,14 @@
         }
 
         /**
-         * Highlights or plays a sound
+         * Highlights and/or plays a sound
+         * 
+         *    Mute sounds | Play send sounds | IsSendSound? || Sound played?
+         * 1.     F       |  F               | F            || T
+         * 2.     F       |  F               | T            || F
+         * 3.     F       |  T               | F            || F
+         * 4.     F       |  T               | T            || T
+         * 5.     T       |  x               | x            || F
          * 
          * Params
          *  - ordinal Card ordinal to highlight and/or play.
@@ -140,7 +146,7 @@
          *  - color blue or green
          *  - forceMute Pretty much that
          */
-        const highlightSound2 = (ordinal, sent, color, forceMute) => {
+        const playSound = (ordinal, sent, color, forceMute) => {
             sent = sent ?? false
             forceMute = forceMute ?? false
             let linkElement = undefined;
@@ -165,53 +171,6 @@
             });
         }
 
-        /**
-         *    Mute sounds | Play send sounds | IsSendSound? || Sound played?
-         * 1.     F       |  F               | F            || T
-         * 2.     F       |  F               | T            || F
-         * 3.     F       |  T               | F            || F
-         * 4.     F       |  T               | T            || T
-         * 5.     T       |  x               | x            || F
-         * 
-         * The second parameter indicates that the sound was sent through the websocket.
-         */
-        const playSound = (ordinal) => {
-            const sent = true // sent === undefined ? false : sent
-            let linkElement = undefined;
-            if (ordinal) {
-                linkElement = document.querySelector(`#soundboard-${ordinal}-download-link`)
-            }
-            let audio
-            if (linkElement) {
-                const audioData = linkElement.getAttribute('href')
-                audio = new Audio(audioData)
-            }
-            audio.addEventListener("canplaythrough", () => {
-                const soundcardElement = document.querySelector(`#soundboard-${ordinal}`)
-                if (soundcardElement) {
-                    highlightSound(soundcardElement, audio, ordinal)
-                }
-                if (!muted.state) {
-                    if (!sent || sent && shouldPlaySendSounds.state) {
-                        audio.play()
-                    }
-                }
-            });
-        }
-
-        const playSound2 = (elId) => {
-            const el = document.getElementById(elId)
-
-            const audioData = el.getAttribute('href')
-            const audio = new Audio(audioData)
-            audio.addEventListener("canplaythrough", (event) => {
-                if (el) {
-                    highlightSound(el.parentNode.parentNode, audio, el.parentNode.parentNode.getAttribute("id"))
-                }
-                audio.play()
-            });
-        }
-
         const muteSounds = (ev) => {
             muted.update(ev.target.checked)
         }
@@ -221,109 +180,7 @@
             configurePlaySendSoundEl()
         }
 
-        let dragged = null;
-
-        const dragStart = (e) => {
-            dragged = event.target;
-            document.querySelectorAll('.droppable').forEach((el) => {
-                const classesToAdd = ['border-sky-400']
-                const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
-
-                el.classList.add(...classesToAdd)
-                el.classList.remove(...classesToRemove)
-            })
-        }
-
-        const dragEnd = (e) => {
-            document.querySelectorAll('.droppable').forEach((el) => {
-                const classesToRemove = ['border-sky-400']
-                const classesToAdd = ['border-gray-200', 'dark:border-gray-700']
-
-                el.classList.add(...classesToAdd)
-                el.classList.remove(...classesToRemove)
-            })
-        }
-
-        const makeDroppable = (el) => {
-            const target = el
-            target.addEventListener('dragover', (event) => {
-                event.preventDefault()
-            })
-
-            target.addEventListener('drop', (event) => {
-                event.preventDefault()
-                let target = event.target
-                event.stopImmediatePropagation()
-                while (!target.classList.contains('droppable')) {
-                    target = target.parentNode
-                }
-                if (target.classList.contains('droppable')) {
-
-                    const soundLocation = dragged.getAttribute('data-soundname')
-                    const soundID = target.getAttribute('data-soundid')
-                    const body = {
-                        add: {
-                            soundLocation
-                        }
-                    }
-                    if (soundID != null && soundID !== '') {
-                        body.delete = {
-                            soundID,
-                        }
-                    }
-
-                    fetch('/swap-sound', {
-                        method: 'POST',
-                        headers: {
-                            'content-type': 'application/json'
-                        },
-                        body: JSON.stringify(body)
-                    })
-                }
-            })
-        }
-
-        const makeDraggable = (el) => {
-            el.addEventListener('dragstart', dragStart)
-            el.addEventListener('dragend', dragEnd)
-        }
-
-        const addSoundUpdates = (hiddenSounds, hasEmpty) => {
-            let disableFn = (el) => el.setAttribute('disabled', 'true')
-            if (hasEmpty) {
-                disableFn = (el) => el.removeAttribute('disabled')
-            }
-            document.querySelectorAll(".add-sound-component").forEach((el) => {
-                const soundName = el.getAttribute('data-soundname')
-                const splitSoundName = soundName.split('.')[0]
-                // if (soundName && hiddenSounds.includes(splitSoundName)) { // should be hidden
-                //     el.classList.add('hidden');
-                // } else {
-                //     el.classList.remove('hidden');
-                // }
-                disableFn(el.querySelector('button'))
-            });
-        }
-
-        window._makeDraggable = makeDraggable;
-        window._makeDroppable = makeDroppable;
-        // TODO this is pretty much the same as play sound
-        window._highlightSound = (ordinal, color) => {
-            color = color === undefined ? 'green' : color
-            let linkElement = document.querySelector(`#soundboard-${ordinal}-download-link`)
-            let audio
-            if (linkElement) {
-                const audioData = linkElement.getAttribute('href')
-                audio = new Audio(audioData)
-            }
-            audio.addEventListener("canplaythrough", () => {
-                const el = document.querySelector(`#soundboard-${ordinal}`)
-                highlightSound(el, audio, ordinal, color)
-            });
-        };
-        window._highlightSound2 = highlightSound2;
         window._playSound = playSound;
-        window._playSound2 = playSound2;
         window._muteSounds = muteSounds;
         window._playSendSounds = playSendSounds;
         window._iconLoad = iconLoad;

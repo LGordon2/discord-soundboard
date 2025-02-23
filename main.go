@@ -560,7 +560,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
 				w.WriteHeader(500)
 			} else {
-				playSoundPayload := []byte("<div id=\"playsound\"><script>window._highlightSound2('" + ordinal + "', true, 'green')</script></div>")
+				playSoundPayload := []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'green')</script></div>")
 				mu.RLock()
 				for _, clientChan := range clients {
 					clientChan <- playSoundPayload
@@ -573,7 +573,7 @@ func main() {
 			return
 		}
 
-		playSoundPayload := []byte("<div id=\"playsound\"><script>window._highlightSound2('" + ordinal + "', true, 'blue', true)</script></div>")
+		playSoundPayload := []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'blue', true)</script></div>")
 		mu.RLock()
 		for _, clientChan := range clients {
 			clientChan <- playSoundPayload
@@ -605,7 +605,7 @@ func main() {
 			return
 		}
 
-		playSoundPayload = []byte("<div id=\"playsound\"><script>window._highlightSound2('" + ordinal + "', true, 'green')</script></div>")
+		playSoundPayload = []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'green')</script></div>")
 		mu.RLock()
 		for _, clientChan := range clients {
 			clientChan <- playSoundPayload
