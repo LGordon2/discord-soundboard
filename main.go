@@ -131,7 +131,7 @@ func mp3Duration(filepath string) (time.Duration, error) {
 	return time.Duration(durationFloat * 1e9), nil
 }
 
-func fetchStoredSounds() ([]string, map[string][]byte, []float64, error) {
+func fetchStoredSounds() ([]string, map[string][]byte, error) {
 	files, err := os.ReadDir(soundsDir)
 	if err != nil {
 		panic(err)
@@ -139,7 +139,6 @@ func fetchStoredSounds() ([]string, map[string][]byte, []float64, error) {
 	sort.Slice(files, func(i, j int) bool { return strings.ToLower(files[i].Name()) < strings.ToLower(files[j].Name()) })
 
 	storedSounds := []string{}
-	storedSoundDurations := []float64{}
 	storedSoundMap := make(map[string][]byte) // these won't contain the extension
 	for _, f := range files {
 		if !(strings.HasSuffix(f.Name(), ".ogg") || strings.HasSuffix(f.Name(), ".mp3")) {
@@ -150,21 +149,13 @@ func fetchStoredSounds() ([]string, map[string][]byte, []float64, error) {
 		data, err := os.ReadFile(path.Join(soundsDir, f.Name()))
 		if err == nil {
 			storedSoundMap[nameWithoutExt] = data
-			duration, err := mp3Duration(path.Join(soundsDir, f.Name()))
-			if err == nil {
-				fmt.Fprintf(os.Stdout, "%v, duration %v\n", f.Name(), duration)
-			} else {
-				fmt.Fprintf(os.Stderr, "%v\n", err)
-			}
-			storedSoundDurations = append(storedSoundDurations, duration.Seconds())
 		} else {
 			storedSoundMap[nameWithoutExt] = []byte{}
-			storedSoundDurations = append(storedSoundDurations, 0.0)
 
 			fmt.Printf("[warn] couldn't prefetch file %s\n", f.Name())
 		}
 	}
-	return storedSounds, storedSoundMap, storedSoundDurations, nil
+	return storedSounds, storedSoundMap, nil
 }
 
 type SoundboardSoundWithOrdinal struct {
@@ -188,7 +179,7 @@ func main() {
 	userIsInChannel.Store(false)
 	var mu sync.RWMutex
 	sounds := [soundboardSoundCount]SoundboardSound{}
-	storedSounds, storedSoundMap, storedSoundDurations, err := fetchStoredSounds()
+	storedSounds, storedSoundMap, err := fetchStoredSounds()
 	if err != nil {
 		panic(err)
 	}
@@ -239,7 +230,7 @@ func main() {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
 			soundData := storedSoundMap[storedSoundNoExt]
 			// hide sounds already present on the sound map
-			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, storedSoundDurations[i], userIsInChannel.Load(), soundData))
+			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, userIsInChannel.Load(), soundData))
 		}
 		buf.WriteString("</div>")
 		var minifiedBuf bytes.Buffer
@@ -325,9 +316,8 @@ func main() {
 			})
 		}
 
-		if newStoredSounds, newStoredSoundMap, newStoredSoundDurations, err := fetchStoredSounds(); err == nil {
+		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
 			storedSounds = newStoredSounds
-			storedSoundDurations = newStoredSoundDurations
 			storedSoundMap = newStoredSoundMap
 			if soundboardSound != (SoundboardSoundWithOrdinal{}) {
 				soundUpdates <- []SoundboardSoundWithOrdinal{

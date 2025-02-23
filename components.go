@@ -126,13 +126,12 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 	return builder.String()
 }
 
-func soundCardComponent2(ordinal int, storedSound, guildID string, duration float64, canSend bool, soundData []byte) string {
+func soundCardComponent2(ordinal int, storedSound, guildID string, canSend bool, soundData []byte) string {
 	var builder strings.Builder
 	m := map[string]any{
 		"ordinal":   ordinal,
 		"soundName": storedSound,
 		"guildID":   guildID,
-		"duration":  duration,
 		"canSend":   canSend,
 		"soundData": base64.StdEncoding.EncodeToString(soundData),
 	}
