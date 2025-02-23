@@ -536,7 +536,8 @@ func main() {
 	}))
 	http.HandleFunc("/quickplay", func(w http.ResponseWriter, r *http.Request) {
 		soundLocation := r.URL.Query().Get("soundLocation")
-		if soundLocation == "" {
+		ordinal := r.URL.Query().Get("ordinal")
+		if soundLocation == "" || ordinal == "" {
 			w.WriteHeader(400)
 			return
 		}
@@ -558,11 +559,25 @@ func main() {
 				fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
 				w.WriteHeader(500)
 			} else {
+				playSoundPayload := []byte("<div id=\"playsound\"><script>window._highlightSound('" + ordinal + "', 'green')</script></div>")
+				mu.RLock()
+				for _, clientChan := range clients {
+					clientChan <- playSoundPayload
+				}
+				mu.RUnlock()
+
 				fmt.Fprintf(os.Stdout, "sending stored sound: %v\n", soundId)
 				w.WriteHeader(202)
 			}
 			return
 		}
+
+		playSoundPayload := []byte("<div id=\"playsound\"><script>window._highlightSound('" + ordinal + "', 'blue')</script></div>")
+		mu.RLock()
+		for _, clientChan := range clients {
+			clientChan <- playSoundPayload
+		}
+		mu.RUnlock()
 
 		randomSound := mySounds[rand.Intn(len(mySounds))]
 		err = discordClient.DeleteSoundboardSound(guildID, randomSound.ID)
@@ -588,6 +603,13 @@ func main() {
 			w.WriteHeader(500)
 			return
 		}
+
+		playSoundPayload = []byte("<div id=\"playsound\"><script>window._highlightSound('" + ordinal + "', 'green')</script></div>")
+		mu.RLock()
+		for _, clientChan := range clients {
+			clientChan <- playSoundPayload
+		}
+		mu.RUnlock()
 
 		fmt.Fprintf(os.Stdout, "sending new stored sound: %v\n", resp.SoundID)
 		w.WriteHeader(202)

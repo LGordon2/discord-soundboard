@@ -94,8 +94,8 @@ const soundCardComponent2TmplRaw = `
 			</button>
 			<button
 				hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')"
-				hx-post="/quickplay?soundLocation={{.soundName}}"
-				hx-on:click="window._highlightSound('{{.ordinal}}')"
+				hx-post="/quickplay?soundLocation={{.soundName}}&ordinal={{.ordinal}}"
+				
 				hx-swap="none"
 				class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"
 				{{if not .canSend}}disabled="true"{{end}}>
@@ -103,6 +103,8 @@ const soundCardComponent2TmplRaw = `
 		</div>
 	</div>
 `
+
+// hx-on:click="window._highlightSound('{{.ordinal}}')"
 
 func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool, deleteButton any) string {
 	var builder strings.Builder

@@ -126,11 +126,13 @@
             el.innerHTML = iconSvg
         }
 
-        const highlightSound = (el, audio, soundId) => {
+        const highlightSound = (el, audio, soundId, color) => {
             if (playTimeouts[soundId]) {
+                el.classList.remove(...['border-blue-400', 'border-green-400'])
+                el.classList.add(...['border-gray-200', 'dark:border-gray-700'])
                 clearTimeout(playTimeouts[soundId]);
             }
-            const classesToAdd = ['border-green-400']
+            const classesToAdd = [`border-${color}-400`]
             const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
 
             el.classList.add(...classesToAdd)
@@ -176,8 +178,8 @@
          * 
          * The second parameter indicates that the sound was sent through the websocket.
          */
-        const playSound = (ordinal, sent, useCdn) => {
-            sent = sent === undefined ? false : sent
+        const playSound = (ordinal) => {
+            const sent = true // sent === undefined ? false : sent
             let linkElement = undefined;
             if (ordinal) {
                 linkElement = document.querySelector(`#soundboard-${ordinal}-download-link`)
@@ -309,7 +311,8 @@
         window._makeDraggable = makeDraggable;
         window._makeDroppable = makeDroppable;
         // TODO this is pretty much the same as play sound
-        window._highlightSound = (ordinal) => {
+        window._highlightSound = (ordinal, color) => {
+            color = color === undefined ? 'green' : color
             let linkElement = document.querySelector(`#soundboard-${ordinal}-download-link`)
             let audio
             if (linkElement) {
@@ -318,7 +321,7 @@
             }
             audio.addEventListener("canplaythrough", () => {
                 const el = document.querySelector(`#soundboard-${ordinal}`)
-                highlightSound(el, audio, ordinal)
+                highlightSound(el, audio, ordinal, color)
             });
         };
         window._highlightSound2 = highlightSound2;
