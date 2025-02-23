@@ -226,7 +226,6 @@ func main() {
 		}
 
 		buf.WriteString(`<div id="addsoundscript"><script type="text/javascript">window._addSoundUpdates(` + hiddenSoundString + `, ` + hasEmptyString + `)</script></div>`)
-
 		var minifiedBuf bytes.Buffer
 		m.Minify("text/html", &minifiedBuf, &buf)
 		return minifiedBuf
@@ -241,7 +240,9 @@ func main() {
 			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, storedSoundDurations[i], userIsInChannel.Load(), soundData))
 		}
 		buf.WriteString("</div>")
-		return &buf
+		var minifiedBuf bytes.Buffer
+		m.Minify("text/html", &minifiedBuf, &buf)
+		return &minifiedBuf
 	}
 
 	go func() {
@@ -559,7 +560,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
 				w.WriteHeader(500)
 			} else {
-				playSoundPayload := []byte("<div id=\"playsound\"><script>window._highlightSound('" + ordinal + "', 'green')</script></div>")
+				playSoundPayload := []byte("<div id=\"playsound\"><script>window._highlightSound2('" + ordinal + "', true, 'green')</script></div>")
 				mu.RLock()
 				for _, clientChan := range clients {
 					clientChan <- playSoundPayload
@@ -572,7 +573,7 @@ func main() {
 			return
 		}
 
-		playSoundPayload := []byte("<div id=\"playsound\"><script>window._highlightSound('" + ordinal + "', 'blue')</script></div>")
+		playSoundPayload := []byte("<div id=\"playsound\"><script>window._highlightSound2('" + ordinal + "', true, 'blue', true)</script></div>")
 		mu.RLock()
 		for _, clientChan := range clients {
 			clientChan <- playSoundPayload
@@ -604,7 +605,7 @@ func main() {
 			return
 		}
 
-		playSoundPayload = []byte("<div id=\"playsound\"><script>window._highlightSound('" + ordinal + "', 'green')</script></div>")
+		playSoundPayload = []byte("<div id=\"playsound\"><script>window._highlightSound2('" + ordinal + "', true, 'green')</script></div>")
 		mu.RLock()
 		for _, clientChan := range clients {
 			clientChan <- playSoundPayload
@@ -618,7 +619,7 @@ func main() {
 		port := "3000"
 		fmt.Printf("starting http server on localhost:%s...\n", port)
 		host := "0.0.0.0:"
-		host = "127.0.0.1:"
+		// host = "127.0.0.1:"
 		err := http.ListenAndServe(host+port, http.DefaultServeMux)
 		if err != nil {
 			panic(err)

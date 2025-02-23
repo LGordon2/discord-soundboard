@@ -89,7 +89,7 @@ const soundCardComponent2TmplRaw = `
 		<div class="flex flex-row divide-x divide-gray-700">
 			<button
 				hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')"
-				hx-on:click="window._playSound('{{.ordinal}}')"
+				hx-on:click="window._highlightSound2('{{.ordinal}}', false, 'green')"
 				class="flex flex-1 items-center justify-center mt-1">
 			</button>
 			<button

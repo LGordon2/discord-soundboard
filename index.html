@@ -39,7 +39,7 @@
                     </label>
                 </div>
             </div>
-            <div id="playsounddisabled"></div>
+            <div id="playsound"></div>
             <div id="addsoundscript"></div>
             <div class="p-4 flex flex-row text-gray-900 dark:text-white">
                 <svg class="h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -72,19 +72,6 @@
 
         let muted = toggleState('mute-sounds-checkbox')
         let shouldPlaySendSounds = toggleState('play-send-sounds-checkbox')
-
-        const configurePlaySendSoundEl = () => {
-            const el = document.querySelector('#playsound') ?? document.querySelector('#playsounddisabled')
-            if (el) {
-                if (shouldPlaySendSounds.state) {
-                    el.setAttribute('id', 'playsound')
-                } else {
-                    el.setAttribute('id', 'playsounddisabled')
-                }
-            }
-        }
-
-        configurePlaySendSoundEl()
 
         const iconLoad = (el, iconType) => {
             let iconSvg;
@@ -144,28 +131,38 @@
             playTimeouts[soundId] = timeoutId;
         }
 
-        const highlightSound2 = (elId, duration) => {
-            const el = document.querySelector('#' + elId)
-            if (!el) {
-                console.error('could not find ele ', elId)
-                return;
+        /**
+         * Highlights or plays a sound
+         * 
+         * Params
+         *  - ordinal Card ordinal to highlight and/or play.
+         *  - sent If this was triggered due to a send-soundboard-sound. If false, it's meant to be played.
+         *  - color blue or green
+         *  - forceMute Pretty much that
+         */
+        const highlightSound2 = (ordinal, sent, color, forceMute) => {
+            sent = sent ?? false
+            forceMute = forceMute ?? false
+            let linkElement = undefined;
+            if (ordinal) {
+                linkElement = document.querySelector(`#soundboard-${ordinal}-download-link`)
             }
-
-            const soundId = elId
-
-            if (playTimeouts[soundId]) {
-                clearTimeout(playTimeouts[soundId]);
+            let audio
+            if (linkElement) {
+                const audioData = linkElement.getAttribute('href')
+                audio = new Audio(audioData)
             }
-            const classesToAdd = ['border-green-400']
-            const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
-
-            el.classList.add(...classesToAdd)
-            el.classList.remove(...classesToRemove)
-            const timeoutId = setTimeout(() => {
-                el.classList.add(...classesToRemove)
-                el.classList.remove(...classesToAdd)
-            }, duration * 1000)
-            playTimeouts[soundId] = timeoutId;
+            audio.addEventListener("canplaythrough", () => {
+                const soundcardElement = document.querySelector(`#soundboard-${ordinal}`)
+                if (soundcardElement) {
+                    highlightSound(soundcardElement, audio, ordinal, color)
+                }
+                if (!muted.state && !forceMute) {
+                    if (!sent || sent && shouldPlaySendSounds.state) {
+                        audio.play()
+                    }
+                }
+            });
         }
 
         /**
