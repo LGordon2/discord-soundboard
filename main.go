@@ -189,7 +189,6 @@ func main() {
 	soundUpdates := make(chan []SoundboardSoundWithOrdinal, 100)
 	clients := make(map[*websocket.Conn]chan []byte)
 	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
-		var buf bytes.Buffer
 		// write updates for new sounds
 		// for _, sound := range newSounds {
 		// 	if sound.SoundboardSound == (SoundboardSound{}) {
@@ -202,26 +201,10 @@ func main() {
 		// 	buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
 		// }
 
-		hasEmpty := false
-		hiddenSounds := make([]string, 0)
 		// This is used later to prune sounds that can be added or disables adding new sounds.
-		for _, sound := range sounds {
-			if sound == (SoundboardSound{}) {
-				hasEmpty = true
-				break
-			}
-			hiddenSounds = append(hiddenSounds, "\""+sound.Name+"\"")
-		}
-		hiddenSoundString := "[" + strings.Join(hiddenSounds, ",") + "]"
-		hasEmptyString := "false"
-		if hasEmpty {
-			hasEmptyString = "true"
-		}
 
-		buf.WriteString(`<div id="addsoundscript"><script type="text/javascript">window._addSoundUpdates(` + hiddenSoundString + `, ` + hasEmptyString + `)</script></div>`)
-		var minifiedBuf bytes.Buffer
-		m.Minify("text/html", &minifiedBuf, &buf)
-		return minifiedBuf
+		var buf bytes.Buffer
+		return buf
 	}
 	updateStoredSounds := func(soundsWithOrdinal []SoundboardSoundWithOrdinal) *bytes.Buffer {
 		var buf bytes.Buffer = latestSoundUpdate(soundsWithOrdinal)
