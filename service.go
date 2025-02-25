@@ -43,6 +43,7 @@ func addSound(discordClient *DiscordRestClient, storedSoundMap map[string][]byte
 	arr = strings.Split(nameAndExt, ".")
 	name := arr[0]
 	extension := arr[len(arr)-1]
+	fmt.Printf("nameAndExt %v\n", nameAndExt)
 
 	resp, err := discordClient.CreateSoundboardSound(guildID, name, "audio/"+extension, data)
 	if err != nil {

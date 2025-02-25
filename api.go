@@ -23,13 +23,11 @@ type DiscordRestClient struct {
 }
 
 func NewDiscordRestClient(token, tokenType string) *DiscordRestClient {
-	// if tokenType == "" {
-	// 	tokenType = "Bot"
-	// }
 	discord, err := discordgo.New(tokenType + token)
 	if err != nil {
 		panic(err)
 	}
+	discord.Debug = false
 	u, err := discord.User("@me")
 	if err != nil {
 		panic(err)
@@ -95,8 +93,10 @@ func (c *DiscordRestClient) CreateSoundboardSound(guildId, name, mimeType string
 		Sound: soundBuf.String(),
 	}, func(cfg *discordgo.RequestConfig) {
 		cfg.Request.Header.Set("X-Super-Properties", superProperties)
+		cfg.ShouldRetryOnRateLimit = false
 	})
 	if err != nil {
+		fmt.Printf("CreateSoundboardSound err: %v\n", err)
 		return CreateSoundboardSoundResponse{}, err
 	}
 	fmt.Printf("CreateSoundboardSound: %v\n", time.Since(start))

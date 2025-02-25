@@ -11,10 +11,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -79,10 +77,10 @@ var (
 	soundsDir    string // where you store sounds on the server (e.g. /home/user/sounds/...)
 )
 
-const guildID = "284709094588284929"   // Viznet
-const channelID = "284709094588284930" // general channel
-// const guildID = "752332599631806505"   // Faceclub
-// const channelID = "752332599631806509" // general channel
+// const guildID = "284709094588284929"   // Viznet
+// const channelID = "284709094588284930" // general channel
+const guildID = "752332599631806505"   // Faceclub
+const channelID = "752332599631806509" // general channel
 
 const soundboardSoundCount = 8
 
@@ -90,47 +88,6 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  32 * 1024,
 	WriteBufferSize: 32 * 1024,
 } // use default options
-
-func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) string {
-	textColor := "text-rose-400"
-	disabledProp := ""
-	hiddenTooltip := ""
-	if disabled {
-		disabledProp = "disabled"
-		textColor = "text-gray-400"
-		hiddenTooltip = uploadedByComponent(username, avatarCDN)
-	}
-
-	return fmt.Sprintf(`<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'minus')" class="flex flex-1 peer items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s></button>%s`, textColor, soundId, guildId, disabledProp, hiddenTooltip)
-}
-
-func mp3Duration(filepath string) (time.Duration, error) {
-	cmd := exec.Command("ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", filepath)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return time.Duration(0), err
-	}
-	if err := cmd.Start(); err != nil {
-		return time.Duration(0), err
-	}
-	var ffmpegOutput struct {
-		Format struct {
-			Filename string `json:"filename"`
-			Duration string `json:"duration"`
-		} `json:"format"`
-	}
-	if err := json.NewDecoder(stdout).Decode(&ffmpegOutput); err != nil {
-		return time.Duration(0), err
-	}
-	if err := cmd.Wait(); err != nil {
-		return time.Duration(0), err
-	}
-	durationFloat, err := strconv.ParseFloat(ffmpegOutput.Format.Duration, 64)
-	if err != nil {
-		return time.Duration(0), err
-	}
-	return time.Duration(durationFloat * 1e9), nil
-}
 
 func fetchStoredSounds() ([]string, map[string][]byte, error) {
 	files, err := os.ReadDir(soundsDir)
@@ -187,34 +144,22 @@ func main() {
 	discordClient := NewDiscordRestClient(authToken, "")
 
 	msgUpdates := make(chan []byte, 100)
-	soundUpdates := make(chan []SoundboardSoundWithOrdinal, 100)
 	clients := make(map[*websocket.Conn]chan []byte)
-	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
-		// write updates for new sounds
-		// for _, sound := range newSounds {
-		// 	if sound.SoundboardSound == (SoundboardSound{}) {
-		// 		buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, true, nil))
-		// 	}
-		// 	disabled := sound.UserID != discordClient.userID
-		// 	_, cannotSave := storedSoundMap[sound.Name]
-		// 	userInfo := userInfoCache[sound.UserID]
-		// 	avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
-		// 	buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
-		// }
-
-		// This is used later to prune sounds that can be added or disables adding new sounds.
-
-		var buf bytes.Buffer
-		return buf
-	}
 	updateStoredSounds := func(soundsWithOrdinal []SoundboardSoundWithOrdinal) *bytes.Buffer {
-		var buf bytes.Buffer = latestSoundUpdate(soundsWithOrdinal)
+		var buf bytes.Buffer
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		for i, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
 			soundData := storedSoundMap[storedSoundNoExt]
 			// hide sounds already present on the sound map
-			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, userIsInChannel.Load(), soundData))
+			onSoundboard := false
+			for _, soundWithOrdinal := range soundsWithOrdinal {
+				if storedSoundNoExt == soundWithOrdinal.Name {
+					onSoundboard = true
+					break
+				}
+			}
+			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, userIsInChannel.Load(), onSoundboard, soundData))
 		}
 		buf.WriteString("</div>")
 		var minifiedBuf bytes.Buffer
@@ -222,12 +167,7 @@ func main() {
 		return &minifiedBuf
 	}
 
-	go func() {
-		for newSounds := range soundUpdates {
-			buf := latestSoundUpdate(newSounds)
-			msgUpdates <- buf.Bytes()
-		}
-	}()
+	// main go routine to update all clients
 	go func() {
 		for msgUpdate := range msgUpdates {
 			mu.RLock()
@@ -237,26 +177,6 @@ func main() {
 			mu.RUnlock()
 		}
 	}()
-	http.HandleFunc("/send-sound", func(w http.ResponseWriter, r *http.Request) {
-		soundID := r.URL.Query().Get("soundID")
-		if soundID == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		err := discordClient.SendSoundboardSound(guildID, channelID, soundID)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "[error] send soundboard err: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		playSoundPayload := []byte("<div id=\"playsound\"><script>window._playSound(null, '" + soundID + "', true)</script></div>")
-		mu.RLock()
-		for _, clientChan := range clients {
-			clientChan <- playSoundPayload
-		}
-		mu.RUnlock()
-	})
 	saveSoundFunc := func(soundID, soundName string) error {
 		resp, err := http.DefaultClient.Get("https://cdn.discordapp.com/soundboard-sounds/" + soundID)
 		if err != nil {
@@ -285,15 +205,8 @@ func main() {
 			return err
 		}
 
-		soundboardSound := SoundboardSoundWithOrdinal{}
 		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
 		for i, sound := range sounds {
-			if sound.ID == soundID {
-				soundboardSound = SoundboardSoundWithOrdinal{
-					ordinal:         i,
-					SoundboardSound: sound,
-				}
-			}
 			soundsWithOrdinal = append(soundsWithOrdinal, SoundboardSoundWithOrdinal{
 				ordinal:         i,
 				SoundboardSound: sound,
@@ -303,37 +216,21 @@ func main() {
 		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
 			storedSounds = newStoredSounds
 			storedSoundMap = newStoredSoundMap
-			if soundboardSound != (SoundboardSoundWithOrdinal{}) {
-				soundUpdates <- []SoundboardSoundWithOrdinal{
-					soundboardSound,
-				}
-			}
 			msgUpdates <- updateStoredSounds(soundsWithOrdinal).Bytes()
 		}
 		return nil
 	}
-	http.HandleFunc("/save-sound", func(w http.ResponseWriter, r *http.Request) {
-		soundID := r.URL.Query().Get("soundID")
-		soundName := r.URL.Query().Get("soundName")
-		if soundID == "" || soundName == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if err := saveSoundFunc(soundID, soundName); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		// upgrade to websockets
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Print("upgrade:", err)
 			return
 		}
 		defer c.Close()
-		soundChan := make(chan []byte, 100)
+
+		msgChan := make(chan []byte, 100)
 		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
 		for i, sound := range sounds {
 			soundsWithOrdinal = append(soundsWithOrdinal, SoundboardSoundWithOrdinal{
@@ -342,8 +239,10 @@ func main() {
 			})
 		}
 
+		// wait until all messages have been sent to the client.
 		waitChan := make(chan struct{})
 
+		// main go routine to heartbeat and send messages to clients.
 		go func() {
 			for {
 				timer := time.NewTimer(5 * time.Second)
@@ -351,9 +250,9 @@ func main() {
 				select {
 				case <-timer.C:
 					err = c.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(2*time.Second))
-				case sound := <-soundChan:
+				case msg := <-msgChan:
 					c.SetWriteDeadline(time.Now().Add(10 * time.Second))
-					err = c.WriteMessage(websocket.TextMessage, []byte(sound))
+					err = c.WriteMessage(websocket.TextMessage, []byte(msg))
 				}
 
 				if err != nil {
@@ -367,14 +266,17 @@ func main() {
 			waitChan <- struct{}{}
 		}()
 
-		soundChan <- updateStoredSounds(soundsWithOrdinal).Bytes()
+		msgChan <- updateStoredSounds(soundsWithOrdinal).Bytes()
 
+		// add client to map
 		mu.Lock()
-		clients[c] = soundChan
+		clients[c] = msgChan
 		mu.Unlock()
 
+		// notify all clients new user count
 		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", len(clients)))
 
+		// read messages and break on errors.
 		for {
 			_, _, err := c.ReadMessage()
 			if err != nil {
@@ -388,134 +290,18 @@ func main() {
 		delete(clients, c)
 		mu.Unlock()
 
-		close(soundChan)
+		close(msgChan)
 		<-waitChan
 
+		// notify all clients new user count
 		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", len(clients)))
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		code := r.URL.Query().Get("code")
-
-		if code != "" {
-			var buf bytes.Buffer
-			buf.WriteString("grant_type=authorization_code&code=" + code + "&redirect_uri=http://localhost:3000")
-			req, err := http.NewRequest(http.MethodPost, "https://discord.com/api/oauth2/token", &buf)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] %v", err)
-				return
-			}
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			req.SetBasicAuth(clientID, clientSecret)
-
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] %v", err)
-				return
-			}
-			if resp.StatusCode != http.StatusOK {
-				data, _ := io.ReadAll(resp.Body)
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] invalid status code %v %v", resp.StatusCode, string(data))
-				return
-			}
-
-			var m map[string]interface{}
-			err = json.NewDecoder(resp.Body).Decode(&m)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] %v", err)
-				return
-			}
-
-			fmt.Println(m)
-			discordClient = NewDiscordRestClient(m["access_token"].(string), "Bearer")
-			r2, err := http.NewRequest("GET", "/", nil)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] %v", err)
-				return
-			}
-			http.Redirect(w, r2, "/", http.StatusFound)
-			return
-		}
-
 		http.FileServer(http.Dir(".")).ServeHTTP(w, r)
 	})
-	http.HandleFunc("/swap-sound", func(w http.ResponseWriter, r *http.Request) {
-		input := struct {
-			Add    addSoundInput    `json:"add"`
-			Delete deleteSoundInput `json:"delete"`
-		}{}
-
-		err := json.NewDecoder(r.Body).Decode(&input)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(os.Stderr, "[error] decoding: %v\n", err)
-			fmt.Fprintf(w, "%v", err)
-			return
-		}
-
-		if input.Delete != (deleteSoundInput{}) {
-			err = deleteSound(discordClient, guildID, input.Delete)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(os.Stderr, "[error] deleting during swap: %v\n", err)
-				fmt.Fprintf(w, "[error] deleting during swap: %v", err)
-				return
-			}
-		}
-
-		_, err = addSound(discordClient, storedSoundMap, input.Add)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(os.Stderr, "[error] adding during swap: %v\n", err)
-			fmt.Fprintf(w, "[error] adding during swap: %v", err)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-	})
-	http.Handle("/delete-sound", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := deleteSound(discordClient, r.URL.Query().Get("guildID"), deleteSoundInput{
-			SoundID: r.URL.Query().Get("soundID"),
-		})
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "%v", err)
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	http.HandleFunc("/add-sound", func(w http.ResponseWriter, r *http.Request) {
-		soundLocation := r.URL.Query().Get("soundLocation")
-		_, err := addSound(discordClient, storedSoundMap, addSoundInput{
-			SoundLocation: soundLocation,
-		})
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(w, "%v", err)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-	})
-	http.Handle("/sounds", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var buf bytes.Buffer
-		buf.WriteString("<ul>")
-		for _, sound := range sounds {
-			buf.WriteString(fmt.Sprintf("<li>%s (%s) <button onclick=\"new Audio('https://cdn.discordapp.com/soundboard-sounds/%s').play()\">Play</button><button hx-delete=\"/delete-sound?soundID=%s&guildID=%s\">Delete</button></li>", sound.Name, sound.ID, sound.ID, sound.ID, guildID))
-		}
-		for _, storedSound := range storedSounds {
-			buf.WriteString(fmt.Sprintf("<li>%s <button hx-post=\"/add-sound?soundLocation=%s&guildID=%s\">Add</button></li>", storedSound, storedSound, guildID))
-		}
-		buf.WriteString("</ul>")
-		w.Write(buf.Bytes())
-	}))
 	http.HandleFunc("/quickplay", func(w http.ResponseWriter, r *http.Request) {
-		timeoutCtx, _ := context.WithTimeout(r.Context(), 5*time.Second)
+		timeoutCtx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
 		r = r.WithContext(timeoutCtx)
 		soundLocation := r.URL.Query().Get("soundLocation")
 		ordinal := r.URL.Query().Get("ordinal")
@@ -541,12 +327,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
 				w.WriteHeader(500)
 			} else {
-				playSoundPayload := []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'green')</script></div>")
-				mu.RLock()
-				for _, clientChan := range clients {
-					clientChan <- playSoundPayload
-				}
-				mu.RUnlock()
+				msgUpdates <- []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'green')</script></div>")
 
 				fmt.Fprintf(os.Stdout, "sending stored sound: %v\n", soundId)
 				w.WriteHeader(202)
@@ -554,14 +335,9 @@ func main() {
 			return
 		}
 
-		playSoundPayload := []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'blue', true)</script></div>")
-		mu.RLock()
-		for _, clientChan := range clients {
-			clientChan <- playSoundPayload
-		}
-		mu.RUnlock()
+		msgUpdates <- []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'blue', true)</script></div>")
 
-		if len(mySounds) > 0 {
+		if len(mySounds) == 8 {
 			randomSound := mySounds[rand.Intn(len(mySounds))]
 			err = discordClient.DeleteSoundboardSound(guildID, randomSound.ID)
 			if err != nil {
@@ -572,7 +348,7 @@ func main() {
 		}
 
 		resp, err := addSound(discordClient, storedSoundMap, addSoundInput{
-			SoundLocation: soundLocation,
+			SoundLocation: soundLocation + ".mp3",
 		})
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
@@ -588,21 +364,18 @@ func main() {
 			return
 		}
 
-		playSoundPayload = []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'green')</script></div>")
-		mu.RLock()
-		for _, clientChan := range clients {
-			clientChan <- playSoundPayload
-		}
-		mu.RUnlock()
+		msgUpdates <- []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'green')</script></div>")
 
 		fmt.Fprintf(os.Stdout, "sending new stored sound: %v\n", resp.SoundID)
 		w.WriteHeader(202)
 	})
+
+	// server
 	go func() {
 		port := "3000"
 		fmt.Printf("starting http server on localhost:%s...\n", port)
 		host := "0.0.0.0:"
-		// host = "127.0.0.1:"
+		host = "127.0.0.1:"
 		err := http.ListenAndServe(host+port, http.DefaultServeMux)
 		if err != nil {
 			panic(err)
@@ -735,7 +508,6 @@ func main() {
 					}
 				}
 
-				newUpdates := []SoundboardSoundWithOrdinal{}
 				for _, soundboardSound := range dmd.SoundboardSounds {
 					id := soundboardSound.SoundID
 					name := soundboardSound.Name
@@ -758,20 +530,12 @@ func main() {
 							emptyPositions = emptyPositions[1:]
 							newSounds[emptyPos] = newSound
 							// send updates for any sounds added
-							newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
-								ordinal:         emptyPos,
-								SoundboardSound: newSound,
-							})
 						}
 					}
 				}
 				// send updates for any sounds removed
-				for i, newSound := range newSounds {
-					if newSound == (SoundboardSound{}) {
-						newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
-							ordinal: i,
-						})
-					} else {
+				for _, newSound := range newSounds {
+					if newSound != (SoundboardSound{}) {
 						// auto save new sounds
 						if _, ok := storedSoundMap[newSound.Name]; !ok {
 							saveSoundFunc(newSound.ID, newSound.Name)
@@ -779,7 +543,6 @@ func main() {
 					}
 				}
 				sounds = newSounds
-				soundUpdates <- newUpdates
 			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
 				fetchSoundboardSounds()
@@ -793,15 +556,14 @@ func main() {
 					updateChannelID := dmd.ChannelID
 					userIsInChannel.Store(updateChannelID == channelID)
 				}
-				// just force updates on all the sounds!
-				updates := make([]SoundboardSoundWithOrdinal, 0)
-				for i, sound := range sounds {
-					updates = append(updates, SoundboardSoundWithOrdinal{
-						ordinal:         i,
-						SoundboardSound: sound,
-					})
+				var playSoundPayload []byte
+				if userIsInChannel.Load() {
+					playSoundPayload = []byte("<div id=\"playsound\"><script>document.querySelectorAll('button.send-sound-btn').forEach(btn => btn.removeAttribute('disabled'))</script></div>")
+				} else {
+					playSoundPayload = []byte("<div id=\"playsound\"><script>document.querySelectorAll('button.send-sound-btn').forEach(btn => btn.setAttribute('disabled', true))</script></div>")
 				}
-				soundUpdates <- updates
+
+				msgUpdates <- playSoundPayload
 			}
 		}
 		return nil, false

@@ -97,9 +97,10 @@ const soundCardComponent2TmplRaw = `
 				hx-post="/quickplay?soundLocation={{.soundName}}&ordinal={{.ordinal}}"
 				
 				hx-swap="none"
-				class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"
+				class="send-sound-btn flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500"
 				{{if not .canSend}}disabled="true"{{end}}>
 			</button>
+			{{if .onSoundboard}}<span>on soundboard</span>{{end}}
 		</div>
 	</div>
 `
@@ -126,14 +127,15 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 	return builder.String()
 }
 
-func soundCardComponent2(ordinal int, storedSound, guildID string, canSend bool, soundData []byte) string {
+func soundCardComponent2(ordinal int, storedSound, guildID string, canSend bool, onSoundboard bool, soundData []byte) string {
 	var builder strings.Builder
 	m := map[string]any{
-		"ordinal":   ordinal,
-		"soundName": storedSound,
-		"guildID":   guildID,
-		"canSend":   canSend,
-		"soundData": base64.StdEncoding.EncodeToString(soundData),
+		"ordinal":      ordinal,
+		"soundName":    storedSound,
+		"guildID":      guildID,
+		"canSend":      canSend,
+		"soundData":    base64.StdEncoding.EncodeToString(soundData),
+		"onSoundboard": onSoundboard,
 	}
 	err := soundCardComponent2Tmpl.Execute(&builder, m)
 	if err != nil {
