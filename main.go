@@ -158,7 +158,7 @@ func main() {
 					break
 				}
 			}
-			buf.WriteString(soundCardComponent2(i, storedSoundNoExt, guildID, userIsInChannel.Load(), onSoundboard, soundData))
+			buf.WriteString(soundCardComponent(i, storedSoundNoExt, guildID, userIsInChannel.Load(), onSoundboard, soundData))
 		}
 		buf.WriteString("</div>")
 		var minifiedBuf bytes.Buffer
