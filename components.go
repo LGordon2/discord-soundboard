@@ -93,6 +93,7 @@ const soundCardComponent2TmplRaw = `
 				class="flex flex-1 items-center justify-center mt-1">
 			</button>
 			<button
+				id="send-sound-btn-{{.ordinal}}"
 				hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')"
 				hx-post="/quickplay?soundLocation={{.soundName}}&ordinal={{.ordinal}}"
 				

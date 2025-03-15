@@ -71,10 +71,8 @@ type SoundboardSound struct {
 }
 
 var (
-	clientID     string // these are TODO, but unused.
-	clientSecret string
-	authToken    string // grab from a discord API call
-	soundsDir    string // where you store sounds on the server (e.g. /home/user/sounds/...)
+	authToken string // grab from a discord API call
+	soundsDir string // where you store sounds on the server (e.g. /home/user/sounds/...)
 )
 
 // const guildID = "284709094588284929"   // Viznet
@@ -89,6 +87,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 32 * 1024,
 } // use default options
 
+// returns the list of sounds, and a map of sound name to sound data
 func fetchStoredSounds() ([]string, map[string][]byte, error) {
 	files, err := os.ReadDir(soundsDir)
 	if err != nil {
@@ -394,8 +393,8 @@ func main() {
 			conn.Close()
 		}()
 
+		// receiving messages from the discord websocket
 		recvMsgChan := make(chan DiscordMessage, 100)
-
 		go func() {
 			for {
 				var msg DiscordMessage
@@ -407,7 +406,7 @@ func main() {
 				}
 
 				switch msg.Data.(type) {
-				case map[string]interface{}:
+				case map[string]any:
 					data, err := json.Marshal(msg.Data)
 					if err != nil {
 						close(recvMsgChan)
@@ -438,8 +437,8 @@ func main() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
 
+		// writing messages to the discord websocket and also sending heartbeats.
 		msgChan := make(chan []byte, 100)
-
 		go func() {
 			for {
 				select {
@@ -474,6 +473,7 @@ func main() {
 				continue
 			}
 
+			// additional ready data
 			if *recvMsg.Type == "READY_SUPPLEMENTAL" {
 				for _, guild := range dmd.Guilds {
 					if guild.ID != guildID {
@@ -498,17 +498,7 @@ func main() {
 			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && dmd.GuildID == guildID {
 				newSounds := [soundboardSoundCount]SoundboardSound{}
 
-				emptyPositions := []int{}
-				soundMap := make(map[string]int)
-				for i, sound := range sounds {
-					if sound == (SoundboardSound{}) {
-						emptyPositions = append(emptyPositions, i)
-					} else {
-						soundMap[sound.ID] = i
-					}
-				}
-
-				for _, soundboardSound := range dmd.SoundboardSounds {
+				for i, soundboardSound := range dmd.SoundboardSounds {
 					id := soundboardSound.SoundID
 					name := soundboardSound.Name
 
@@ -520,33 +510,19 @@ func main() {
 						userInfoCache[userID] = old
 					}
 					newSound := SoundboardSound{Name: name, ID: id, UserID: userID, Avatar: soundboardSound.User.Avatar}
-
-					// check if new sound is in sounds, if so place in same spot
-					if pos, ok := soundMap[newSound.ID]; ok { // sound was already present
-						newSounds[pos] = newSound
-					} else { // otherwise place in first available spot
-						if len(emptyPositions) > 0 {
-							emptyPos := emptyPositions[0]
-							emptyPositions = emptyPositions[1:]
-							newSounds[emptyPos] = newSound
-							// send updates for any sounds added
-						}
-					}
-				}
-				// send updates for any sounds removed
-				for _, newSound := range newSounds {
 					if newSound != (SoundboardSound{}) {
-						// auto save new sounds
+						// if we detect a new sound that we don't have try to save it.
 						if _, ok := storedSoundMap[newSound.Name]; !ok {
 							saveSoundFunc(newSound.ID, newSound.Name)
 						}
 					}
+					newSounds[i] = newSound
 				}
 				sounds = newSounds
-			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
+			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" { // someone added to the soundboard
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
 				fetchSoundboardSounds()
-			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" {
+			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" { // someone removed from the soundboard
 				json.NewEncoder(os.Stdout).Encode(recvMsg.Data)
 				fetchSoundboardSounds()
 			} else if *recvMsg.Type == "VOICE_STATE_UPDATE" {
@@ -582,8 +558,6 @@ func main() {
 }
 
 func init() {
-	clientID = os.Getenv("CLIENT_ID")
-	clientSecret = os.Getenv("CLIENT_SECRET")
 	authToken = os.Getenv("AUTH_TOKEN")
 	soundsDir = os.Getenv("SOUNDS_DIR")
 }
