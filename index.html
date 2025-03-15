@@ -130,6 +130,8 @@
             playTimeouts[soundId] = timeoutId;
         }
 
+        const audioMap = {};
+
         /**
          * Highlights and/or plays a sound
          * 
@@ -165,6 +167,11 @@
                 }
                 if (!muted.state && !forceMute) {
                     if (!sent || sent && shouldPlaySendSounds.state) {
+                        if (audioMap[ordinal]) {
+                            audioMap[ordinal].pause();
+                        }
+                        console.log('audioMap', audioMap)
+                        audioMap[ordinal] = audio;
                         audio.play()
                     }
                 }
