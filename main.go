@@ -75,10 +75,10 @@ var (
 	soundsDir string // where you store sounds on the server (e.g. /home/user/sounds/...)
 )
 
-// const guildID = "284709094588284929"   // Viznet
-// const channelID = "284709094588284930" // general channel
-const guildID = "752332599631806505"   // Faceclub
-const channelID = "752332599631806509" // general channel
+const guildID = "284709094588284929"   // Viznet
+const channelID = "284709094588284930" // general channel
+// const guildID = "752332599631806505"   // Faceclub
+// const channelID = "752332599631806509" // general channel
 
 const soundboardSoundCount = 8
 
