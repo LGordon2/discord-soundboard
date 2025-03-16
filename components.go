@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/base64"
 	"strings"
 	"text/template"
 )
@@ -18,7 +17,7 @@ const soundCardComponentTmplRaw = `
 				id="soundboard-{{.ordinal}}-download-link"
 				class="shrink text-blue-500 ml-1"
 				download="{{.soundName}}.mp3"
-				href="data:audio/mp3;base64,{{.soundData}}"
+				href="/play?soundLocation={{.soundName}}"
 				hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'download')">
 			</a>
 		</div>
@@ -42,14 +41,13 @@ const soundCardComponentTmplRaw = `
 	</div>
 `
 
-func soundCardComponent(ordinal int, storedSound, guildID string, canSend bool, onSoundboard bool, soundData []byte) string {
+func soundCardComponent(ordinal int, storedSound, guildID string, canSend bool, onSoundboard bool) string {
 	var builder strings.Builder
 	m := map[string]any{
 		"ordinal":      ordinal,
 		"soundName":    storedSound,
 		"guildID":      guildID,
 		"canSend":      canSend,
-		"soundData":    base64.StdEncoding.EncodeToString(soundData),
 		"onSoundboard": onSoundboard,
 	}
 	err := soundCardComponentTmpl.Execute(&builder, m)

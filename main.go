@@ -149,7 +149,6 @@ func main() {
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		for i, storedSound := range storedSounds {
 			storedSoundNoExt := strings.Split(storedSound, ".")[0]
-			soundData := storedSoundMap[storedSoundNoExt]
 			// hide sounds already present on the sound map
 			onSoundboard := false
 			for _, soundWithOrdinal := range soundsWithOrdinal {
@@ -158,7 +157,8 @@ func main() {
 					break
 				}
 			}
-			buf.WriteString(soundCardComponent(i, storedSoundNoExt, guildID, userIsInChannel.Load(), onSoundboard, soundData))
+
+			buf.WriteString(soundCardComponent(i, storedSoundNoExt, guildID, userIsInChannel.Load(), onSoundboard))
 		}
 		buf.WriteString("</div>")
 		var minifiedBuf bytes.Buffer
@@ -368,6 +368,13 @@ func main() {
 
 		fmt.Fprintf(os.Stdout, "sending new stored sound: %v\n", resp.SoundID)
 		w.WriteHeader(202)
+	})
+	http.HandleFunc("/play", func(w http.ResponseWriter, r *http.Request) {
+		soundLocation := r.URL.Query().Get("soundLocation")
+
+		w.Header().Set("content-type", "audio/mp3")
+		w.Header().Set("cache-control", "public, max-age=2592000")
+		w.Write(storedSoundMap[soundLocation])
 	})
 
 	// server
