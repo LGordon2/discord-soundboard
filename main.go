@@ -336,8 +336,9 @@ func main() {
 
 		msgUpdates <- []byte("<div id=\"playsound\"><script>window._playSound('" + ordinal + "', true, 'blue', true)</script></div>")
 
-		if len(mySounds) == 8 {
+		if len(sounds) == 8 {
 			randomSound := mySounds[rand.Intn(len(mySounds))]
+			fmt.Fprintf(os.Stdout, "trying to delete stored sound id: %v\n", randomSound.ID)
 			err = discordClient.DeleteSoundboardSound(guildID, randomSound.ID)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "quickplay error: %v\n", err)
