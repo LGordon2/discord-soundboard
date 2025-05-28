@@ -260,8 +260,7 @@
             }
             document.querySelectorAll(".add-sound-component").forEach((el) => {
                 const soundName = el.getAttribute('data-soundname')
-                const splitSoundName = soundName.split('.')[0]
-                if (soundName && hiddenSounds.includes(splitSoundName)) { // should be hidden
+                if (soundName && hiddenSounds.includes(soundName)) { // should be hidden
                     el.classList.add('hidden');
                 } else {
                     el.classList.remove('hidden');
