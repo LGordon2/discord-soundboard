@@ -73,10 +73,10 @@ var (
 	soundsDir    string // where you store sounds on the server (e.g. /home/user/sounds/...)
 )
 
-const guildID = "284709094588284929"   // Viznet
-const channelID = "284709094588284930" // general channel
-// const guildID = "752332599631806505"   // Faceclub
-// const channelID = "752332599631806509" // general channel
+// const guildID = "284709094588284929"   // Viznet
+// const channelID = "284709094588284930" // general channel
+const guildID = "752332599631806505"   // Faceclub
+const channelID = "752332599631806509" // general channel
 
 const soundboardSoundCount = 8
 
@@ -249,18 +249,11 @@ func main() {
 		}
 		mu.RUnlock()
 	})
-	http.HandleFunc("/save-sound", func(w http.ResponseWriter, r *http.Request) {
-		soundID := r.URL.Query().Get("soundID")
-		soundName := r.URL.Query().Get("soundName")
-		if soundID == "" || soundName == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
+	saveSoundFunc := func(soundID, soundName string) error {
 		resp, err := http.DefaultClient.Get("https://cdn.discordapp.com/soundboard-sounds/" + soundID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[error] saving file: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		contentType := resp.Header.Get("Content-Type")
@@ -275,15 +268,13 @@ func main() {
 		data, err := io.ReadAll(resp.Body)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[error] saving file, could not read response body: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		err = os.WriteFile(path.Join(soundsDir, soundName+"."+extension), data, 0644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[error] saving file, could not write to disk: %v\n", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+			return err
 		}
 
 		soundboardSound := SoundboardSoundWithOrdinal{}
@@ -312,7 +303,22 @@ func main() {
 			msgUpdates <- updateStoredSounds(soundsWithOrdinal).Bytes()
 		}
 
-		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+
+	http.HandleFunc("/save-sound", func(w http.ResponseWriter, r *http.Request) {
+		soundID := r.URL.Query().Get("soundID")
+		soundName := r.URL.Query().Get("soundName")
+		if soundID == "" || soundName == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if err := saveSoundFunc(soundID, soundName); err != nil {
+			fmt.Fprintf(os.Stderr, "[error] saving file: %v\n", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	})
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -750,6 +756,12 @@ func main() {
 						newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
 							ordinal: i,
 						})
+					} else {
+						// if we detect a new sound that we don't have try to save it.
+						if _, ok := storedSoundMap[newSound.Name]; !ok {
+							fmt.Printf("attempting to save new sound %v\n", newSound.Name)
+							saveSoundFunc(newSound.ID, newSound.Name)
+						}
 					}
 				}
 				sounds = newSounds
