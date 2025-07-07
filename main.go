@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -112,7 +113,8 @@ func fetchStoredSounds() ([]string, map[string][]byte, error) {
 			continue
 		}
 		storedSounds = append(storedSounds, f.Name())
-		nameWithoutExt := strings.Split(f.Name(), ".")[0]
+		ext := filepath.Ext(f.Name())
+		nameWithoutExt := strings.TrimSuffix(f.Name(), ext)
 		data, err := os.ReadFile(path.Join(soundsDir, f.Name()))
 		if err == nil {
 			storedSoundMap[nameWithoutExt] = data
@@ -200,14 +202,18 @@ func main() {
 				hasEmpty = true
 				continue
 			}
+			fmt.Printf("sound %s\n", sound)
 			soundMap[sound.Name] = true
 		}
+		_ = hasEmpty
 
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
 		for _, storedSound := range storedSounds {
-			storedSoundNoExt := strings.Split(storedSound, ".")[0]
+			ext := filepath.Ext(storedSound)
+			storedSoundNoExt := strings.TrimSuffix(storedSound, ext)
 			// hide sounds already present on the sound map
 			_, ok := soundMap[storedSoundNoExt]
+			fmt.Printf("hiding %s, thing: %v, thing2: %v, ok: %v\n", storedSoundNoExt, soundMap["............................beh!"], soundMap[storedSoundNoExt], ok)
 			buf.WriteString(addSoundCardComponent(storedSoundNoExt, guildID, !hasEmpty, ok))
 		}
 		buf.WriteString("</div>")
@@ -546,9 +552,8 @@ func main() {
 		arr := strings.Split(soundLocation, "/")
 		nameAndExt := arr[len(arr)-1]
 
-		arr = strings.Split(nameAndExt, ".")
-		name := arr[0]
-		extension := arr[len(arr)-1]
+		extension := strings.TrimPrefix(filepath.Ext(nameAndExt), ".")
+		name := strings.TrimSuffix(nameAndExt, extension)
 
 		soundboardResponse, err := discordClient.CreateSoundboardSound(guildID, name, "audio/"+extension, data)
 		if err != nil {
