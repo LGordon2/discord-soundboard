@@ -72,8 +72,9 @@ func (c *DiscordRestClient) DeleteSoundboardSound(guildId, soundId string) error
 }
 
 type CreateSoundboardSoundRequest struct {
-	Name  string `json:"name"`
-	Sound string `json:"sound"`
+	Name   string `json:"name"`
+	Sound  string `json:"sound"`
+	Volume int    `json:"volume"`
 }
 
 type CreateSoundboardSoundResponse struct {
@@ -88,12 +89,14 @@ func (c *DiscordRestClient) CreateSoundboardSound(guildId, name, mimeType string
 	var soundBuf bytes.Buffer
 	soundBuf.WriteString("data:" + mimeType + ";base64,")
 	soundBuf.WriteString(base64.StdEncoding.EncodeToString(data))
+	request := CreateSoundboardSoundRequest{
+		Name:   name,
+		Sound:  soundBuf.String(),
+		Volume: 1,
+	}
 
 	start := time.Now()
-	resp, err := c.discord.Request(http.MethodPost, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds", CreateSoundboardSoundRequest{
-		Name:  name,
-		Sound: soundBuf.String(),
-	}, func(cfg *discordgo.RequestConfig) {
+	resp, err := c.discord.Request(http.MethodPost, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds", request, func(cfg *discordgo.RequestConfig) {
 		cfg.Request.Header.Set("X-Super-Properties", superProperties)
 	})
 	if err != nil {

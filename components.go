@@ -34,7 +34,7 @@ const addSoundCardComponentTmplRaw = `
         <div class="flex flex-row">
             <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
             </h5>
-            <button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" hx-swap="none" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'plus')" hx-post="/add-sound?soundLocation={{ .soundName }}&guildID={{ .guildID }}"></button>
+            <button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" hx-swap="none" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'plus')" hx-post="/add-sound?soundLocation={{ .soundName }}{{ .extension }}&guildID={{ .guildID }}"></button>
         </div>
     </div>
 `
@@ -90,10 +90,11 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 	return builder.String()
 }
 
-func addSoundCardComponent(storedSound, guildID string, disabled, hidden bool) string {
+func addSoundCardComponent(storedSound, extension, guildID string, disabled, hidden bool) string {
 	var builder strings.Builder
 	m := map[string]any{
 		"soundName": storedSound,
+		"extension": extension,
 		"guildID":   guildID,
 		"disabled":  disabled,
 		"hidden":    hidden,

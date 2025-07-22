@@ -109,12 +109,12 @@ func fetchStoredSounds() ([]string, map[string][]byte, error) {
 	storedSounds := []string{}
 	storedSoundMap := make(map[string][]byte) // these won't contain the extension
 	for _, f := range files {
-		if !(strings.HasSuffix(f.Name(), ".ogg") || strings.HasSuffix(f.Name(), ".mp3")) {
+		ext := path.Ext(f.Name())
+		if ext != ".ogg" && ext != ".mp3" {
 			continue
 		}
-		storedSounds = append(storedSounds, f.Name())
-		ext := filepath.Ext(f.Name())
 		nameWithoutExt := strings.TrimSuffix(f.Name(), ext)
+		storedSounds = append(storedSounds, f.Name())
 		data, err := os.ReadFile(path.Join(soundsDir, f.Name()))
 		if err == nil {
 			storedSoundMap[nameWithoutExt] = data
@@ -213,8 +213,7 @@ func main() {
 			storedSoundNoExt := strings.TrimSuffix(storedSound, ext)
 			// hide sounds already present on the sound map
 			_, ok := soundMap[storedSoundNoExt]
-			fmt.Printf("hiding %s, thing: %v, thing2: %v, ok: %v\n", storedSoundNoExt, soundMap["............................beh!"], soundMap[storedSoundNoExt], ok)
-			buf.WriteString(addSoundCardComponent(storedSoundNoExt, guildID, !hasEmpty, ok))
+			buf.WriteString(addSoundCardComponent(storedSoundNoExt, ext, guildID, !hasEmpty, ok))
 		}
 		buf.WriteString("</div>")
 		return &buf
@@ -504,6 +503,7 @@ func main() {
 		})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(os.Stdout, "%v\n", err)
 			fmt.Fprintf(w, "%v", err)
 			return
 		}
