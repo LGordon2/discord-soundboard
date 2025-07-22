@@ -226,10 +226,11 @@
                 if (target.classList.contains('droppable')) {
 
                     const soundLocation = dragged.getAttribute('data-soundname')
+                    const soundExtension = dragged.getAttribute('data-soundext')
                     const soundID = target.getAttribute('data-soundid')
                     const body = {
                         add: {
-                            soundLocation
+                            soundLocation: (soundLocation + soundExtension)
                         }
                     }
                     if (soundID != null && soundID !== '') {
