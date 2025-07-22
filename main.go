@@ -473,6 +473,16 @@ func main() {
 			}
 		}
 
+		if input.Add != (addSoundInput{}) {
+			err = addSound(discordClient, storedSoundMap, input.Add)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprintf(os.Stderr, "[error] deleting during swap: %v\n", err)
+				fmt.Fprintf(w, "[error] deleting during swap: %v", err)
+				return
+			}
+		}
+
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(os.Stderr, "[error] adding during swap: %v\n", err)
