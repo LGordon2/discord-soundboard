@@ -202,7 +202,6 @@ func main() {
 				hasEmpty = true
 				continue
 			}
-			fmt.Printf("sound %s\n", sound)
 			soundMap[sound.Name] = true
 		}
 		_ = hasEmpty
@@ -474,7 +473,6 @@ func main() {
 			}
 		}
 
-		err = addSound(discordClient, storedSoundMap, input.Add)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(os.Stderr, "[error] adding during swap: %v\n", err)
