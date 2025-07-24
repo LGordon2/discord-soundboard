@@ -90,13 +90,12 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 	return builder.String()
 }
 
-func addSoundCardComponent(storedSound, extension, guildID string, disabled, hidden bool) string {
+func addSoundCardComponent(storedSound, extension, guildID string, hidden bool) string {
 	var builder strings.Builder
 	m := map[string]any{
 		"soundName": storedSound,
 		"extension": extension,
 		"guildID":   guildID,
-		"disabled":  disabled,
 		"hidden":    hidden,
 	}
 	err := addSoundCardComponentTmpl.Execute(&builder, m)

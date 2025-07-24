@@ -178,7 +178,8 @@ func main() {
 				hasEmpty = true
 				break
 			}
-			hiddenSounds = append(hiddenSounds, "\""+sound.Name+"\"")
+
+			hiddenSounds = append(hiddenSounds, "\""+strings.ReplaceAll(sound.Name, "\"", "\\\"")+"\"") // just in case a sound has quotes
 		}
 		hiddenSoundString := "[" + strings.Join(hiddenSounds, ",") + "]"
 		hasEmptyString := "false"
@@ -212,7 +213,7 @@ func main() {
 			storedSoundNoExt := strings.TrimSuffix(storedSound, ext)
 			// hide sounds already present on the sound map
 			_, ok := soundMap[storedSoundNoExt]
-			buf.WriteString(addSoundCardComponent(storedSoundNoExt, ext, guildID, !hasEmpty, ok))
+			buf.WriteString(addSoundCardComponent(storedSoundNoExt, ext, guildID, ok))
 		}
 		buf.WriteString("</div>")
 		return &buf
