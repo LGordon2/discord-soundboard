@@ -4,3 +4,5 @@ discord-soundboard
 .env.bat
 sound-archive
 .vscode
+dist/
+node_modules/
