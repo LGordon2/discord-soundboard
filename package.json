@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc && terser --compress --mangle -o dist/index.js -- dist/index.js"
+    "build": "vite build"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +13,12 @@
   "packageManager": "pnpm@10.8.1",
   "devDependencies": {
     "terser": "^5.44.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@amplitude/analytics-browser": "^2.33.1",
+    "@amplitude/plugin-session-replay-browser": "^1.25.5",
+    "@dragdroptouch/drag-drop-touch": "^2.0.3"
   }
 }

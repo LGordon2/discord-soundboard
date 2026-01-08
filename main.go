@@ -448,7 +448,7 @@ func main() {
 			return
 		}
 
-		http.FileServer(http.Dir(".")).ServeHTTP(w, r)
+		http.FileServer(http.Dir("./dist")).ServeHTTP(w, r)
 	})
 	http.HandleFunc("/swap-sound", func(w http.ResponseWriter, r *http.Request) {
 		input := struct {

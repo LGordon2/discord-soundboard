@@ -1,3 +1,7 @@
+import * as amplitude from '@amplitude/analytics-browser';
+import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
+import { enableDragDropTouch } from '@dragdroptouch/drag-drop-touch';
+
 const playTimeouts: Record<string, any> = {};
 (window as any)._addStats = {};
 
@@ -135,6 +139,8 @@ const playSendSounds = (ev: any) => {
     configurePlaySendSoundEl()
 }
 
+
+
 let dragged: HTMLElement | null = null;
 
 const dragStart = (e: any) => {
@@ -241,3 +247,16 @@ const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
 (window as any)._playSendSounds = playSendSounds;
 (window as any)._iconLoad = iconLoad;
 (window as any)._addSoundUpdates = addSoundUpdates;
+
+// To polyfill the entire document:
+enableDragDropTouch();
+
+(async () => {
+    // Create and Install Session Replay Plugin
+    const sessionReplayTracking = sessionReplayPlugin({ sampleRate: 1, useWebWorker: true });
+    amplitude.add(sessionReplayTracking);
+
+    // Your existing initialization logic with Browser SDK
+    // Using lewg project. Logged in via google
+    amplitude.init('f79ec16f47063ce0fca0b7191abe627');
+})()
