@@ -145,7 +145,7 @@ func main() {
 
 	var userIsInChannel atomic.Bool
 	userIsInChannel.Store(false)
-	var mu sync.RWMutex
+	var mu, soundsMu sync.RWMutex
 	sounds := [soundboardSoundCount]SoundboardSound{}
 	storedSounds, storedSoundMap, err := fetchStoredSounds()
 	if err != nil {
@@ -173,6 +173,7 @@ func main() {
 		hasEmpty := false
 		hiddenSounds := make([]string, 0)
 		// This is used later to prune sounds that can be added or disables adding new sounds.
+		soundsMu.RLock()
 		for _, sound := range sounds {
 			if sound == (SoundboardSound{}) {
 				hasEmpty = true
@@ -181,6 +182,7 @@ func main() {
 
 			hiddenSounds = append(hiddenSounds, "\""+strings.ReplaceAll(sound.Name, "\"", "\\\"")+"\"") // just in case a sound has quotes
 		}
+		soundsMu.RUnlock()
 		hiddenSoundString := "[" + strings.Join(hiddenSounds, ",") + "]"
 		hasEmptyString := "false"
 		if hasEmpty {
@@ -198,6 +200,7 @@ func main() {
 		soundMap := make(map[string]bool)
 		hasEmpty := false
 		// This is used later to prune sounds that can be added or disables adding new sounds.
+		soundsMu.RLock()
 		for _, sound := range sounds {
 			if sound == (SoundboardSound{}) {
 				hasEmpty = true
@@ -205,6 +208,7 @@ func main() {
 			}
 			soundMap[sound.Name] = true
 		}
+		soundsMu.RUnlock()
 		_ = hasEmpty
 
 		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
@@ -284,6 +288,7 @@ func main() {
 
 		soundboardSound := SoundboardSoundWithOrdinal{}
 		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
+		soundsMu.RLock()
 		for i, sound := range sounds {
 			if sound.ID == soundID {
 				soundboardSound = SoundboardSoundWithOrdinal{
@@ -296,6 +301,7 @@ func main() {
 				SoundboardSound: sound,
 			})
 		}
+		soundsMu.RUnlock()
 
 		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
 			storedSounds = newStoredSounds
@@ -335,12 +341,14 @@ func main() {
 		defer c.Close()
 		soundChan := make(chan []byte, 100)
 		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
+		soundsMu.RLock()
 		for i, sound := range sounds {
 			soundsWithOrdinal = append(soundsWithOrdinal, SoundboardSoundWithOrdinal{
 				ordinal:         i,
 				SoundboardSound: sound,
 			})
 		}
+		soundsMu.RUnlock()
 
 		waitChan := make(chan struct{})
 
@@ -524,9 +532,11 @@ func main() {
 	http.Handle("/sounds", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var buf bytes.Buffer
 		buf.WriteString("<ul>")
+		soundsMu.RLock()
 		for _, sound := range sounds {
 			buf.WriteString(fmt.Sprintf("<li>%s (%s) <button onclick=\"new Audio('https://cdn.discordapp.com/soundboard-sounds/%s').play()\">Play</button><button hx-delete=\"/delete-sound?soundID=%s&guildID=%s\">Delete</button></li>", sound.Name, sound.ID, sound.ID, sound.ID, guildID))
 		}
+		soundsMu.RUnlock()
 		for _, storedSound := range storedSounds {
 			buf.WriteString(fmt.Sprintf("<li>%s <button hx-post=\"/add-sound?soundLocation=%s&guildID=%s\">Add</button></li>", storedSound, storedSound, guildID))
 		}
@@ -535,12 +545,14 @@ func main() {
 	}))
 	http.HandleFunc("/quickplay", func(w http.ResponseWriter, r *http.Request) {
 		soundId := ""
+		soundsMu.RLock()
 		for _, sound := range sounds {
 			if sound.Name == "NoOneHeard" {
 				soundId = sound.ID
 				break
 			}
 		}
+		soundsMu.RUnlock()
 		if soundId == "" {
 			fmt.Fprintf(os.Stderr, "could not find NoOneHeard sound replacement\n")
 			w.WriteHeader(500)
@@ -728,6 +740,7 @@ func main() {
 
 				emptyPositions := []int{}
 				soundMap := make(map[string]int)
+				soundsMu.RLock()
 				for i, sound := range sounds {
 					if sound == (SoundboardSound{}) {
 						emptyPositions = append(emptyPositions, i)
@@ -735,6 +748,7 @@ func main() {
 						soundMap[sound.ID] = i
 					}
 				}
+				soundsMu.RUnlock()
 
 				newUpdates := []SoundboardSoundWithOrdinal{}
 				for _, soundboardSound := range dmd.SoundboardSounds {
@@ -780,7 +794,9 @@ func main() {
 						}
 					}
 				}
+				soundsMu.Lock()
 				sounds = newSounds
+				soundsMu.Unlock()
 				soundUpdates <- newUpdates
 			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
