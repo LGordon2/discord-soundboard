@@ -345,11 +345,13 @@ func main() {
 		waitChan := make(chan struct{})
 
 		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+
 			for {
-				timer := time.NewTimer(5 * time.Second)
 				var err error
 				select {
-				case <-timer.C:
+				case <-ticker.C:
 					err = c.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(2*time.Second))
 				case sound := <-soundChan:
 					c.SetWriteDeadline(time.Now().Add(10 * time.Second))
