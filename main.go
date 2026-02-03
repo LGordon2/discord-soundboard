@@ -233,7 +233,13 @@ func main() {
 		for msgUpdate := range msgUpdates {
 			mu.RLock()
 			for _, c := range clients {
-				c <- msgUpdate
+				select {
+				case c <- msgUpdate:
+					// message sent successfully
+				default:
+					// channel full, drop message
+					// Client will get next update anyway
+				}
 			}
 			mu.RUnlock()
 		}
@@ -254,7 +260,11 @@ func main() {
 		playSoundPayload := []byte("<div id=\"playsound\"><script>window._playSound(null, '" + soundID + "', true)</script></div>")
 		mu.RLock()
 		for _, clientChan := range clients {
-			clientChan <- playSoundPayload
+			select {
+			case clientChan <- playSoundPayload:
+			default:
+				// client is slow, skip this update
+			}
 		}
 		mu.RUnlock()
 	})
