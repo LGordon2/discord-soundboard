@@ -230,7 +230,8 @@ const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
 (window as any)._makeDraggable = makeDraggable;
 (window as any)._makeDroppable = makeDroppable;
 // TODO this is pretty much the same as play sound
-(window as any)._highlightSound = (elId: any, soundId: string) => {
+(window as any)._highlightSound = (elId: any, soundId: string, soundName: string) => {
+    amplitude.track('soundboard: play sound', { soundName })
     const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
     let el = undefined;
     if (elId) {
@@ -259,4 +260,5 @@ enableDragDropTouch();
     // Your existing initialization logic with Browser SDK
     // Using lewg project. Logged in via google
     amplitude.init('f79ec16f47063ce0fca0b7191abe627');
+    (window as any)._amplitude = amplitude;
 })()
