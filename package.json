@@ -17,8 +17,8 @@
     "vite": "^7.3.1"
   },
   "dependencies": {
-    "@amplitude/analytics-browser": "^2.33.1",
-    "@amplitude/plugin-session-replay-browser": "^1.25.5",
+    "@amplitude/analytics-browser": "^2.39.0",
+    "@amplitude/plugin-session-replay-browser": "^1.27.7",
     "@dragdroptouch/drag-drop-touch": "^2.0.3"
   }
 }
