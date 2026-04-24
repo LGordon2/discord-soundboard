@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.39.0",
-    "@amplitude/plugin-session-replay-browser": "^1.27.7",
+    "@amplitude/plugin-session-replay-browser": "^1.28.0",
     "@dragdroptouch/drag-drop-touch": "^2.0.3"
   }
 }
