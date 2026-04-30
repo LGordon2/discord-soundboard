@@ -254,7 +254,7 @@ enableDragDropTouch();
 
 (async () => {
     // Create and Install Session Replay Plugin
-    const sessionReplayTracking = sessionReplayPlugin({ sampleRate: 1, useWebWorker: true });
+    const sessionReplayTracking = sessionReplayPlugin({ sampleRate: 1, useWebWorker: true, storeType: 'memory' });
     amplitude.add(sessionReplayTracking);
 
     // Your existing initialization logic with Browser SDK
