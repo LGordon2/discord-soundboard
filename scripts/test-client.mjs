@@ -180,6 +180,6 @@ assert.doesNotMatch(css,/--tw-|tailwind/i);
 assert.doesNotMatch(html,/dark:|grid-cols-|flex-row|bg-gray-/);
 assert.match(css,/\[hidden\][^{]*\{display:none!important\}/);
 assert.match(css,/prefers-color-scheme:dark/);
-assert.match(css,/min-width:1024px[^}]+#playable-sounds\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-assert.match(css,/min-width:640px[^}]+#playable-sounds\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+assert.match(css,/min-width:1024px[^}]+#playable-sounds,#storedsounds\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+assert.match(css,/min-width:640px[^}]+#playable-sounds,#storedsounds\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 console.log('PASS: production controls and analytics; opt-in preview, search, favorites, recent filter, disabling preview, capacity permissions, description subtext, fuzzy search, aligned SVG icons, and plain minified CSS');
