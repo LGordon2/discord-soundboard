@@ -12,62 +12,43 @@ var (
 )
 
 const uploadedByComponentTmplRaw = `
-    <div class="invisible peer-hover:visible hover:visible" style="position: absolute; transform: translate(54px, 26px)">
-        <div
-            class="max-h-24 max-w-72 p-2 m-2 rounded-lg shadow bg-gray-700 flex flex-row text-sm font-medium text-gray-900 dark:text-white truncate">
-            <span class="flex items-center mr-4">Uploaded by</span>
-            <img class="rounded-full w-8 h-8"
-                src="{{.avatarCDN}}?size=32">
-            <span class="flex items-center ml-1 truncate">{{.username}}</span>
-
-        </div>
-        <svg style="transform: translateY(-64px) translateX(164px)" class="text-gray-700" width="10"
-            height="10" xmlns="http://www.w3.org/2000/svg">
-            <polygon points="5,1.5 9,8.5 1,8.5" fill="currentColor" stroke-width="2" />
-        </svg>
+    <div class="uploader-tooltip">
+        <span>Uploaded by</span>
+        <img src="{{.avatarCDN}}?size=32" alt="">
+        <span class="uploader-name">{{.username}}</span>
     </div>
 `
 
 const addSoundCardComponentTmplRaw = `
-    <div draggable="true" data-soundname="{{ .soundNameEscaped }}" data-soundext="{{ .extension }}"
-        class="add-sound-component h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700 {{if .hidden}}hidden{{end}}">
-        <div class="flex flex-row">
-            <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
-            </h5>
-            <button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" data-action="add" data-icon="plus"></button>
+    <div draggable="true" data-soundname="{{.soundName}}" data-soundext="{{.extension}}"
+        class="add-sound-component {{if .hidden}}hidden{{end}}">
+        <div class="sound-header">
+            <h5 class="sound-title library-title">{{.soundName}}</h5>
+            <button class="sound-control" data-action="add" data-icon="plus"></button>
         </div>
     </div>
 `
 
 const soundCardComponentTmplRaw = `
 <div data-soundname="{{.soundName}}" data-soundid="{{.soundId}}" id="soundboard-{{.ordinal}}"
-            class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700 {{ if .canRemove }}droppable{{ end }}">
-            {{ if .used }}
-            <div class="flex flex-row">
-                <h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">{{.soundName}}
-                </h5>
-                <div class="shrink mb-2">
-                    <button data-action="save" data-icon="save" class="enabled:text-blue-500 disabled:text-gray-500"
-                        {{if not .canSave}}disabled="true"{{end}}>
-                    </button>
-                </div>
-                <a class="shrink text-blue-500 ml-1"
-                    href="https://cdn.discordapp.com/soundboard-sounds/{{.soundId}}" data-icon="download" aria-label="Download sound"></a>
-            </div>
-
-            <div class="flex flex-row divide-x divide-gray-700">
-                <button data-action="preview" data-icon="headphones" class="flex flex-1 items-center justify-center mt-1"></button>
-                <button data-action="send" data-icon="play" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500" {{if not .canSend}}disabled="true"{{end}}></button>
-                {{ if .deleteButton }}
-                {{.deleteButton}}
-                {{ end }}
-            </div>
-            {{ else }}
-            <div class="flex items-center justify-center text-center">
-                <h5 class="text-xl text-slate-400">Free</h5>
-            </div>
-            {{ end }}
-        </div>
+     class="sound-card {{if .canRemove}}droppable{{end}}">
+    {{if .used}}
+    <div class="sound-header">
+        <h5 class="sound-title">{{.soundName}}</h5>
+        <button data-action="save" data-icon="save" class="sound-control sound-save"
+                {{if not .canSave}}disabled="true"{{end}}></button>
+        <a class="sound-control sound-download" href="https://cdn.discordapp.com/soundboard-sounds/{{.soundId}}"
+           data-icon="download" aria-label="Download sound"></a>
+    </div>
+    <div class="sound-actions">
+        <button data-action="preview" data-icon="headphones" class="sound-control"></button>
+        <button data-action="send" data-icon="play" class="sound-control" {{if not .canSend}}disabled="true"{{end}}></button>
+        {{if .deleteButton}}{{.deleteButton}}{{end}}
+    </div>
+    {{else}}
+    <div class="sound-empty"><h5>Free</h5></div>
+    {{end}}
+</div>
 `
 
 func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool, deleteButton any) string {

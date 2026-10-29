@@ -14,8 +14,9 @@ import (
 )
 
 func TestAnalyticsPersistenceAndConcurrentRecording(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), "data", "analytics.json")
-	a, err := newLocalAnalytics(filename)
+	filename := filepath.Join(t.TempDir(), "analytics.sqlite3")
+	db := testDatabase(t, filename)
+	a, err := newLocalAnalytics(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,13 +48,10 @@ func TestAnalyticsPersistenceAndConcurrentRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 	info, err := os.Stat(filename)
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("file permissions: %v %v", info, err)
 	}
-	if info.Mode().Perm() != 0600 {
-		t.Fatalf("permissions: %v", info.Mode())
-	}
-	reopened, err := newLocalAnalytics(filename)
+	reopened, err := newLocalAnalytics(testDatabase(t, filename))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,73 +63,43 @@ func TestAnalyticsPersistenceAndConcurrentRecording(t *testing.T) {
 	if err := reopened.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var saved AnalyticsSnapshot
-	if err := json.Unmarshal(data, &saved); err != nil {
-		t.Fatal(err)
-	}
-	if saved.Totals.Sent != 1001 {
-		t.Fatalf("file not updated: %s", data)
-	}
-	leftovers, _ := filepath.Glob(filepath.Join(filepath.Dir(filename), ".soundboard-*.tmp"))
-	if len(leftovers) != 0 {
-		t.Fatalf("temporary files left behind: %v", leftovers)
+	var sent uint64
+	if err := db.QueryRow("SELECT sent FROM sound_counts WHERE name='one'").Scan(&sent); err != nil || sent != 1001 {
+		t.Fatalf("saved sent=%d err=%v", sent, err)
 	}
 }
 
-func TestAnalyticsPreservesCorruptFileAndRetriesFailedWrites(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), "data", "analytics.json")
-	if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
-		t.Fatal(err)
-	}
-	corrupt := []byte(`{"not valid`)
-	if err := os.WriteFile(filename, corrupt, 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := newLocalAnalytics(filename); err == nil {
-		t.Fatal("accepted corrupt file")
-	}
-	data, _ := os.ReadFile(filename)
-	if string(data) != string(corrupt) {
-		t.Fatal("overwrote corrupt file")
-	}
-	if err := os.Remove(filename); err != nil {
-		t.Fatal(err)
-	}
-	a, err := newLocalAnalytics(filename)
+func TestAnalyticsRetriesFailedTransactions(t *testing.T) {
+	db := testDatabase(t, filepath.Join(t.TempDir(), "test.sqlite3"))
+	a, err := newLocalAnalytics(db)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer a.Close()
 	a.Record("sent", "sound")
-	savedDirectory := filepath.Dir(filename) + "-saved"
-	if err := os.Rename(filepath.Dir(filename), savedDirectory); err != nil {
+	if _, err := db.Exec("PRAGMA query_only=ON"); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.Flush(); err == nil {
 		t.Fatal("expected write failure")
 	}
-	if err := os.Rename(savedDirectory, filepath.Dir(filename)); err != nil {
+	if a.Snapshot().Totals.Sent != 1 {
+		t.Fatal("write failure discarded memory state")
+	}
+	if _, err := db.Exec("PRAGMA query_only=OFF"); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	data, _ = os.ReadFile(filename)
-	var snapshot AnalyticsSnapshot
-	if err := json.Unmarshal(data, &snapshot); err != nil {
-		t.Fatal(err)
-	}
-	if snapshot.Totals.Sent != 1 {
-		t.Fatal("failed flush discarded pending events")
+	var sent uint64
+	if err := db.QueryRow("SELECT sent FROM sound_counts WHERE name='sound'").Scan(&sent); err != nil || sent != 1 {
+		t.Fatalf("saved sent=%d err=%v", sent, err)
 	}
 }
 
 func TestAnalyticsHTTP(t *testing.T) {
-	a, err := newLocalAnalytics(filepath.Join(t.TempDir(), "analytics.json"))
+	a, err := newLocalAnalytics(testDatabase(t, filepath.Join(t.TempDir(), "analytics.sqlite3")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,5 +180,34 @@ func TestDiscordAnalyticsCountSuccessOnceAfterRetry(t *testing.T) {
 				t.Fatalf("added=%d sent=%d", added, sent)
 			}
 		})
+	}
+}
+
+func TestAnalyticsBatchRollsBackAndRetriesAsOneTransaction(t *testing.T) {
+	db := testDatabase(t, filepath.Join(t.TempDir(), "test.sqlite3"))
+	a, err := newLocalAnalytics(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	if _, err := db.Exec("CREATE TRIGGER reject_counts BEFORE INSERT ON sound_counts BEGIN SELECT RAISE(ABORT,'test failure'); END"); err != nil {
+		t.Fatal(err)
+	}
+	a.Record("sent", "new sound")
+	if err := a.Flush(); err == nil {
+		t.Fatal("expected row write failure")
+	}
+	var saved uint64
+	if err := db.QueryRow("SELECT sent FROM analytics_state WHERE id=1").Scan(&saved); err != nil || saved != 0 {
+		t.Fatalf("partial transaction committed: %d %v", saved, err)
+	}
+	if _, err := db.Exec("DROP TRIGGER reject_counts"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT sent FROM analytics_state WHERE id=1").Scan(&saved); err != nil || saved != 1 {
+		t.Fatalf("retry lost count: %d %v", saved, err)
 	}
 }

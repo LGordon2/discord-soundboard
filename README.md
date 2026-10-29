@@ -31,6 +31,32 @@ and run `tsc --noEmit`, `go test ./...`, and `go vet ./...` for checks. Deploy
 frontend and backend together when changing the fragment protocol, and refresh
 existing browser tabs. The systemd service serves `dist` from this checkout.
 
+## Local SQLite storage
+
+Analytics, sound descriptions, and emoji are stored in `data/soundboard.sqlite3`
+relative to the service working directory. Set `DATABASE_FILE` to override the
+path. The database uses WAL mode, a five-second busy timeout, full synchronous
+commits, primary keys on sound names, and owner-only file permissions. Run one
+soundboard service process per database; the application caches current views in
+memory and serializes batched database writes.
+
+On first startup, the service imports the existing `data/analytics.json` and
+`data/sound-metadata.json` in one transaction. A migration marker prevents repeat
+imports, so restarts preserve newer database values. The original JSON files are
+left intact as backups and stop receiving updates. `ANALYTICS_FILE` and
+`SOUND_METADATA_FILE` select alternate legacy files for this first import only.
+A corrupt legacy file stops migration rather than silently resetting data.
+
+Analytics and captured emoji changes commit only changed rows every five seconds,
+and flush on SIGTERM/SIGINT. Description edits commit before reporting success.
+An abrupt kill can lose the last few seconds of buffered counts/emoji changes.
+Failed transactions retain pending changes for retry. The database and WAL files
+are excluded from Git. Use SQLite's backup command/API for a live backup so the
+WAL is included, e.g. `sqlite3 data/soundboard.sqlite3 '.backup backup.sqlite3'`.
+
+The Go SQLite driver requires CGO and a C compiler when building the backend.
+The binary contains SQLite; no separate database server is needed.
+
 ## Local analytics
 
 `/analytics` returns totals and per-sound counters as JSON:
@@ -40,56 +66,40 @@ existing browser tabs. The systemd service serves `dist` from this checkout.
 - `played`: user-initiated browser previews when playback actually starts. Muted or
   failed previews and automatic playback of sent sounds do not count.
 
-The service stores aggregates in `data/analytics.json` relative to its working
-directory. Set `ANALYTICS_FILE` to choose another path. On this host the default is
-`/home/lew/dev/discord-soundboard/data/analytics.json`. The file is excluded from
-Git, uses owner-only permissions, and survives rebuilds and service restarts.
+Sound names identify aggregate rows, so renamed sounds get separate rows. Sends
+whose name is not on the current board use `sound:<id>`. No IP addresses, cookies,
+user identifiers, or audio are collected. Preview reports are best effort. The
+analytics endpoint shows sound names/counts to anyone who can access the board.
 
-Counters are saved every five seconds using atomic file replacement, and flushed
-on SIGTERM/SIGINT. An abrupt kill or power loss can lose the last few seconds.
-Recording does not wait for disk writes. Storage errors are logged without
-breaking sound controls; a corrupt existing file is preserved and analytics stay
-disabled until it is repaired. If a later write fails, memory counters remain and
-persistence retries on the next interval.
+## Preview UI and production assets
 
-Counts start at installation; no historical counts are inferred. Sound names
-identify aggregate rows, so renamed sounds get separate rows. Sends whose sound
-name is not in the current board use `sound:<id>`. No IP addresses, cookies, user
-identifiers, or audio are collected. Preview reports are best effort and are not
-audited usage records. The JSON endpoint is visible to anyone who can access this
-soundboard, and shows sound names/counts without identifying listeners.
+Enable **Preview new UI** at the top of the page for search, favorites, recently
+used sounds, descriptions, and visible Preview/Discord labels. It is off by
+default. The toggle, favorites, and last 24 recent names stay in this browser's
+local storage. Turning preview off restores the existing layout and filters.
 
-## Preview UI and compiled CSS
+Search matches names and descriptions, ignoring case and accents. Partial matches
+work directly. Bounded Levenshtein matching permits one edit for words of four to
+six characters, and two for longer words. Short words use literal matching.
 
-Enable **Preview new UI** at the top of the page to try search (including sound
-descriptions), favorites, recently used sounds, and visible Preview/Discord
-labels. It is off by default. The toggle, favorites, and last 24 recently used
-sound names are saved in this browser's local storage. Turning preview off
-restores the existing card layout and filters without changing the Discord board.
+Styles live in `index.css` under component classes; Tailwind is not required at
+build time or in the browser. Vite emits minified CSS/JavaScript, and the build
+also minifies `index.html`. The backend minifies live card/library HTML fragments.
+Dark mode follows the system preference.
 
-Tailwind is now a build-time dependency, compiled through PostCSS by `pnpm build`.
-The browser loads only the local, minified CSS asset; it does not fetch or run the
-Tailwind CDN compiler. Content scanning includes the HTML, TypeScript, and Go
-source files so server-rendered cards and dynamic status colors are included.
-Dark mode continues to follow the system preference.
-
-`pnpm test` builds the production assets and exercises the native client against
-a test DOM, including preview filters, favorites, descriptions, emoji display,
-playback reporting, and the compiled CSS. Node 24 is recommended. To test an
-already-built staged directory, run `CLIENT_DIST=/path/to/dist pnpm test:client`.
+`pnpm test` builds production assets and runs DOM and search regressions. Node 24
+is recommended. For staged assets run `CLIENT_DIST=/path/to/dist pnpm test:client`.
+Also run `pnpm exec tsc --noEmit`, `go test ./...`, and `go vet ./...`.
+Deploy frontend and backend together when template classes or protocols change.
 
 ## Sound descriptions and emoji
 
-In preview mode, use the **ⓘ** button on a sound card to edit its description or
-source. Descriptions are shared across browsers and saved immediately to
-`data/sound-metadata.json`. Set `SOUND_METADATA_FILE` to override that path.
-The file uses the same atomic-write helper as analytics, owner-only permissions,
-and is excluded from Git. Entries are keyed by sound name; same-named MP3/Ogg
-variants share details. Renaming a sound creates a distinct entry.
+In preview mode, use **ⓘ** to edit a sound's description or source. Descriptions
+are shared across browsers and committed to SQLite immediately. They appear as
+subtext on both library and uploaded cards. The uploader tooltip remains separate.
+Entries are keyed by name, so same-named MP3/Ogg variants share details.
 
-Unicode and custom emoji are captured when Discord soundboard snapshots arrive,
-kept after the sound leaves the board, and reused during subsequent uploads.
-Previously archived sounds without recorded metadata cannot have their original
-emoji inferred. Emoji changes save in the background every five seconds and on
-normal shutdown. If Discord explicitly rejects a stored emoji, the upload retries
-once without it so the audio can still be restored.
+Unicode/custom emoji are captured from Discord snapshots, retained when a sound
+leaves the board, and reused during re-upload. Previously archived sounds without
+recorded metadata cannot have their original emoji inferred. If Discord explicitly
+rejects a stored emoji, the upload retries once without it to restore the audio.

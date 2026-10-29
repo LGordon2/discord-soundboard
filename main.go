@@ -90,16 +90,14 @@ var upgrader = websocket.Upgrader{
 } // use default options
 
 func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) string {
-	textColor := "text-rose-400"
 	disabledProp := ""
 	hiddenTooltip := ""
 	if disabled {
 		disabledProp = "disabled"
-		textColor = "text-gray-400"
 		hiddenTooltip = uploadedByComponent(username, avatarCDN)
 	}
 
-	return fmt.Sprintf(`<button data-action="delete" data-icon="minus" class="flex flex-1 peer items-center justify-center mt-1 %s" data-soundid="%s" data-guildid="%s" %s></button>%s`, textColor, soundId, guildId, disabledProp, hiddenTooltip)
+	return fmt.Sprintf(`<button data-action="delete" data-icon="minus" class="sound-control sound-delete" data-soundid="%s" data-guildid="%s" %s></button>%s`, soundId, guildId, disabledProp, hiddenTooltip)
 }
 
 func fetchStoredSounds() ([]string, storedSoundMap, error) {
@@ -163,20 +161,28 @@ func main() {
 	if metadataFile == "" {
 		metadataFile = filepath.Join("data", "sound-metadata.json")
 	}
-	metadata, metadataErr := newSoundMetadataStore(metadataFile)
-	if metadataErr != nil {
-		log.Printf("[warn] sound metadata unavailable: %v", metadataErr)
-	}
-	discordClient.metadata = metadata
-
 	analyticsFile := os.Getenv("ANALYTICS_FILE")
 	if analyticsFile == "" {
 		analyticsFile = filepath.Join("data", "analytics.json")
 	}
-	analytics, err := newLocalAnalytics(analyticsFile)
-	if err != nil {
-		log.Printf("[warn] local analytics disabled: %v", err)
+	databaseFile := os.Getenv("DATABASE_FILE")
+	if databaseFile == "" {
+		databaseFile = filepath.Join("data", "soundboard.sqlite3")
 	}
+	database, err := openSoundboardDatabase(databaseFile, analyticsFile, metadataFile)
+	if err != nil {
+		log.Fatalf("opening local database: %v", err)
+	}
+	metadata, metadataErr := newSoundMetadataStore(database)
+	if metadataErr != nil {
+		log.Fatalf("loading sound metadata: %v", metadataErr)
+	}
+	discordClient.metadata = metadata
+	analytics, err := newLocalAnalytics(database)
+	if err != nil {
+		log.Fatalf("loading local analytics: %v", err)
+	}
+
 	soundName := func(id string) (string, bool) {
 		if id == "" {
 			return "", false
@@ -214,6 +220,9 @@ func main() {
 				if err := metadata.Close(); err != nil {
 					log.Printf("[warn] flushing metadata on shutdown: %v", err)
 				}
+			}
+			if err := database.Close(); err != nil {
+				log.Printf("[warn] closing database: %v", err)
 			}
 			os.Exit(0)
 		}()
@@ -301,7 +310,7 @@ func main() {
 		soundsMu.RUnlock()
 		_ = hasEmpty
 
-		buf.WriteString("<div id=\"storedsounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl\">")
+		buf.WriteString("<div id=\"storedsounds\">")
 		for _, storedSound := range storedSounds {
 			ext := filepath.Ext(storedSound)
 			storedSoundNoExt := strings.TrimSuffix(storedSound, ext)
@@ -310,6 +319,10 @@ func main() {
 			buf.WriteString(addSoundCardComponent(storedSoundNoExt, ext, guildID, ok))
 		}
 		buf.WriteString("</div>")
+		if compact, err := m.Bytes("text/html", buf.Bytes()); err == nil {
+			buf.Reset()
+			buf.Write(compact)
+		}
 		return &buf
 	}
 
@@ -482,7 +495,7 @@ func main() {
 			}
 		}()
 		var buf bytes.Buffer
-		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl md:sticky md:top-0 md:bg-white md:dark:bg-gray-900\">")
+		buf.WriteString("<div id=\"playable-sounds\">")
 		for i := 0; i < soundboardSoundCount; i++ {
 			buf.WriteString(fmt.Sprintf("<div id=\"soundboard-%d\"></div>", i))
 		}

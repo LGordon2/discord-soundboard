@@ -5,15 +5,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestMetadataPersistsDescriptionAndBothEmojiKinds(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), "sounds.json")
-	store, err := newSoundMetadataStore(filename)
+	filename := filepath.Join(t.TempDir(), "sounds.sqlite3")
+	store, err := newSoundMetadataStore(testDatabase(t, filename))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +29,7 @@ func TestMetadataPersistsDescriptionAndBothEmojiKinds(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := newSoundMetadataStore(filename)
+	reopened, err := newSoundMetadataStore(testDatabase(t, filename))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +52,7 @@ func TestMetadataPersistsDescriptionAndBothEmojiKinds(t *testing.T) {
 }
 
 func TestMetadataAppliedToUploadWithoutChangingCachedRequest(t *testing.T) {
-	store, err := newSoundMetadataStore(filepath.Join(t.TempDir(), "sounds.json"))
+	store, err := newSoundMetadataStore(testDatabase(t, filepath.Join(t.TempDir(), "sounds.sqlite3")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +95,8 @@ func TestMetadataAppliedToUploadWithoutChangingCachedRequest(t *testing.T) {
 }
 
 func TestMetadataEditValidation(t *testing.T) {
-	filename := filepath.Join(t.TempDir(), "sounds.json")
-	store, err := newSoundMetadataStore(filename)
+	filename := filepath.Join(t.TempDir(), "sounds.sqlite3")
+	store, err := newSoundMetadataStore(testDatabase(t, filename))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,21 +123,18 @@ func TestMetadataEditValidation(t *testing.T) {
 	if notified != 1 {
 		t.Fatalf("notifications=%d", notified)
 	}
-	data, err := os.ReadFile(filename)
-	if err != nil {
+	var description string
+	if err := store.db.QueryRow("SELECT description FROM sound_metadata WHERE name='known'").Scan(&description); err != nil {
 		t.Fatal(err)
 	}
-	var saved soundMetadataFile
-	if err := json.Unmarshal(data, &saved); err != nil {
-		t.Fatal(err)
-	}
-	if saved.Sounds["known"].Description != "A source & <script>text</script>" {
+	if description != "A source & <script>text</script>" {
 		t.Fatal("description not persisted")
 	}
+
 }
 
 func TestInvalidEmojiFallsBackWithoutDuplicatingUploadCount(t *testing.T) {
-	store, err := newSoundMetadataStore(filepath.Join(t.TempDir(), "sounds.json"))
+	store, err := newSoundMetadataStore(testDatabase(t, filepath.Join(t.TempDir(), "sounds.sqlite3")))
 	if err != nil {
 		t.Fatal(err)
 	}

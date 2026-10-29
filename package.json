@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "vite build && node scripts/test-client.mjs",
+    "test": "vite build && node scripts/test-client.mjs && node --experimental-strip-types scripts/test-search.mjs",
     "build": "vite build",
     "test:client": "node scripts/test-client.mjs"
   },
@@ -13,10 +13,8 @@
   "license": "ISC",
   "packageManager": "pnpm@10.8.1",
   "devDependencies": {
-    "autoprefixer": "10",
+    "html-minifier-terser": "7.2.0",
     "linkedom": "0.18.12",
-    "postcss": "8",
-    "tailwindcss": "3.4.17",
     "terser": "^5.44.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

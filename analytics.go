@@ -1,12 +1,10 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 )
@@ -25,47 +23,47 @@ type AnalyticsSnapshot struct {
 	Sounds    map[string]SoundCounts `json:"sounds"`
 }
 
-// Record only touches memory. A single writer persists atomic snapshots, keeping
-// disk I/O out of the Discord request path and bounding storage to aggregates.
+// Record only touches memory; changed rows are committed in a background transaction.
 type LocalAnalytics struct {
 	mu           sync.RWMutex
 	flushMu      sync.Mutex
 	state        AnalyticsSnapshot
 	version      uint64
 	savedVersion uint64
-	filename     string
+	db           *sql.DB
+	dirty        map[string]uint64
 	stop         chan struct{}
 	done         chan struct{}
 	closeOnce    sync.Once
 }
 
-func newLocalAnalytics(filename string) (*LocalAnalytics, error) {
-	now := time.Now().UTC()
-	a := &LocalAnalytics{
-		state:   AnalyticsSnapshot{Version: 1, Since: now, UpdatedAt: now, Sounds: make(map[string]SoundCounts)},
-		version: 1, filename: filename, stop: make(chan struct{}), done: make(chan struct{}),
-	}
-	data, err := os.ReadFile(filename)
-	switch {
-	case err == nil:
-		if err = json.Unmarshal(data, &a.state); err != nil {
-			return nil, fmt.Errorf("reading analytics: %w", err)
-		}
-		if a.state.Version != 1 || a.state.Since.IsZero() {
-			return nil, fmt.Errorf("invalid analytics file format")
-		}
-		if a.state.Sounds == nil {
-			a.state.Sounds = make(map[string]SoundCounts)
-		}
-	case os.IsNotExist(err):
-	default:
+func newLocalAnalytics(db *sql.DB) (*LocalAnalytics, error) {
+	a := &LocalAnalytics{db: db, state: AnalyticsSnapshot{Version: 1, Sounds: make(map[string]SoundCounts)}, dirty: make(map[string]uint64), stop: make(chan struct{}), done: make(chan struct{})}
+	var since, updated string
+	if err := db.QueryRow("SELECT since,updated_at,added,sent,played FROM analytics_state WHERE id=1").Scan(&since, &updated, &a.state.Totals.Added, &a.state.Totals.Sent, &a.state.Totals.Played); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
+	var err error
+	if a.state.Since, err = time.Parse(time.RFC3339Nano, since); err != nil {
 		return nil, err
 	}
-	// Verify storage is writable now rather than silently losing counts later.
-	if err := a.Flush(); err != nil {
+	if a.state.UpdatedAt, err = time.Parse(time.RFC3339Nano, updated); err != nil {
+		return nil, err
+	}
+	rows, err := db.Query("SELECT name,added,sent,played FROM sound_counts")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var counts SoundCounts
+		if err := rows.Scan(&name, &counts.Added, &counts.Sent, &counts.Played); err != nil {
+			return nil, err
+		}
+		a.state.Sounds[name] = counts
+	}
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	go func() {
@@ -111,6 +109,7 @@ func (a *LocalAnalytics) Record(event, name string) {
 	a.state.Sounds[name] = counts
 	a.state.UpdatedAt = time.Now().UTC()
 	a.version++
+	a.dirty[name] = a.version
 }
 
 func (a *LocalAnalytics) snapshotLocked() AnalyticsSnapshot {
@@ -137,13 +136,40 @@ func (a *LocalAnalytics) Flush() error {
 		return nil
 	}
 	version := a.version
-	snapshot := a.snapshotLocked()
+	state := a.state
+	changed := make(map[string]SoundCounts, len(a.dirty))
+	for name := range a.dirty {
+		changed[name] = a.state.Sounds[name]
+	}
 	a.mu.RUnlock()
-	if err := atomicWriteJSON(a.filename, snapshot); err != nil {
+	tx, err := a.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("UPDATE analytics_state SET updated_at=?,added=?,sent=?,played=? WHERE id=1", state.UpdatedAt.Format(time.RFC3339Nano), state.Totals.Added, state.Totals.Sent, state.Totals.Played); err != nil {
+		return err
+	}
+	statement, err := tx.Prepare("INSERT INTO sound_counts(name,added,sent,played) VALUES(?,?,?,?) ON CONFLICT(name) DO UPDATE SET added=excluded.added,sent=excluded.sent,played=excluded.played")
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+	for name, counts := range changed {
+		if _, err = statement.Exec(name, counts.Added, counts.Sent, counts.Played); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	a.mu.Lock()
 	a.savedVersion = version
+	for name, revision := range a.dirty {
+		if revision <= version {
+			delete(a.dirty, name)
+		}
+	}
 	a.mu.Unlock()
 	return nil
 }

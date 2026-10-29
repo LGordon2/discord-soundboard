@@ -43,7 +43,7 @@ export const decorateSoundMetadata = (root: ParentNode) => {
         // Rebuild only metadata decorations; leave controls and their state intact.
         card.querySelectorAll('.sound-emoji, .sound-description, [data-edit-description]').forEach(node => node.remove());
         if (!enabled) { card.removeAttribute('title'); continue; }
-        const header = card.querySelector<HTMLElement>('.flex-row');
+        const header = card.querySelector<HTMLElement>('.sound-header');
         if (!header) continue;
         const edit = document.createElement('button');
         edit.type = 'button';
@@ -51,17 +51,16 @@ export const decorateSoundMetadata = (root: ParentNode) => {
         edit.setAttribute('data-edit-description', name);
         edit.setAttribute('aria-label', `Edit description: ${name}`);
         edit.title = 'Sound description and source';
-        edit.textContent = 'ⓘ';
+        edit.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-9h.01"/></svg>';
         header.append(edit);
+        card.removeAttribute('title');
         if (entry?.description) {
-            card.title = entry.description;
-            if (card.classList.contains('add-sound-component')) {
-                const description = document.createElement('p');
-                description.className = 'sound-description';
-                description.textContent = entry.description;
-                card.append(description);
-            }
-        } else { card.removeAttribute('title'); }
+            const description = document.createElement('p');
+            description.className = 'sound-description';
+            description.textContent = entry.description;
+            if (card.classList.contains('add-sound-component')) card.append(description);
+            else header.after(description);
+        }
         const heading = card.querySelector('h5');
         if (heading && (entry?.emoji_id || entry?.emoji_name)) {
             const emoji = document.createElement('span');

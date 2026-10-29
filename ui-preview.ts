@@ -1,3 +1,4 @@
+import { createSoundSearch } from './sound-search';
 import { decorateSoundMetadata, getSoundMetadata } from './sound-metadata';
 
 const keys = { enabled: 'soundboard-ui-preview', favorites: 'soundboard-favorites', recent: 'soundboard-recent' };
@@ -30,6 +31,7 @@ const updateFavorite = (button: HTMLButtonElement, filename: string) => {
 };
 
 export const syncLibraryPreview = () => {
+    const matchesSearch = createSoundSearch(query);
     let visible = 0;
     let available = 0;
     document.querySelectorAll<HTMLElement>('#storedsounds .add-sound-component').forEach(card => {
@@ -41,12 +43,12 @@ export const syncLibraryPreview = () => {
             favorite.type = 'button';
             favorite.className = 'favorite-button';
             favorite.setAttribute('data-favorite', filename);
-            card.querySelector('.flex-row')?.prepend(favorite);
+            card.querySelector('.sound-header')?.prepend(favorite);
         }
         if (enabled && favorite) updateFavorite(favorite, filename);
         if (!enabled) favorite?.remove();
         const recentIndex = recent.indexOf(name);
-        const matches = `${name} ${getSoundMetadata(name)?.description || ''}`.toLocaleLowerCase().includes(query) &&
+        const matches = matchesSearch(name, getSoundMetadata(name)?.description || '') &&
             (filter !== 'favorites' || favorites.has(filename)) &&
             (filter !== 'recent' || recentIndex >= 0);
         card.hidden = enabled && !matches;

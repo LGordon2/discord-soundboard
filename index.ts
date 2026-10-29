@@ -47,16 +47,16 @@ const iconLoad = (el: any, iconType: any) => {
     let iconSvg;
     switch (iconType) {
         case 'play':
-            iconSvg = `<svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">  <polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`
+            iconSvg = `<svg class="control-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">  <polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`
             break;
         case 'minus':
-            iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+            iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="control-icon control-icon-small">
 	<path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"></path>
   </svg>`
             break;
         case 'download':
             iconSvg = `<svg
-                        class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        class="control-icon control-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="7 10 12 15 17 10" />
@@ -64,13 +64,13 @@ const iconLoad = (el: any, iconType: any) => {
                     </svg>`
             break;
         case 'save':
-            iconSvg = `<svg class="h-6 w-6"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round">  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />  <polyline points="17 21 17 13 7 13 7 21" />  <polyline points="7 3 7 8 15 8" /></svg>`
+            iconSvg = `<svg class="control-icon control-icon-small"  viewBox="0 0 24 24"  fill="none"  stroke="currentColor"  stroke-width="2"  stroke-linecap="round"  stroke-linejoin="round">  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />  <polyline points="17 21 17 13 7 13 7 21" />  <polyline points="7 3 7 8 15 8" /></svg>`
             break;
         case 'headphones':
-            iconSvg = `<svg class="h-8 w-8 text-yellow-500"  width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">  <path stroke="none" d="M0 0h24v24H0z"/>  <rect x="4" y="13" rx="2" width="5" height="7" />  <rect x="15" y="13" rx="2" width="5" height="7" />  <path d="M4 15v-3a8 8 0 0 1 16 0v3" /></svg>`
+            iconSvg = `<svg class="control-icon"  width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">  <path stroke="none" d="M0 0h24v24H0z"/>  <rect x="4" y="13" rx="2" width="5" height="7" />  <rect x="15" y="13" rx="2" width="5" height="7" />  <path d="M4 15v-3a8 8 0 0 1 16 0v3" /></svg>`
             break;
         case 'plus':
-            iconSvg = `<svg class="h-8 w-8"
+            iconSvg = `<svg class="control-icon"
                         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                         stroke-linejoin="round">
                         <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -87,14 +87,9 @@ const highlightSound = (el: any, audio: any, soundId: string) => {
     if (playTimeouts[soundId]) {
         clearTimeout(playTimeouts[soundId]);
     }
-    const classesToAdd = ['border-green-400']
-    const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
-
-    el.classList.add(...classesToAdd)
-    el.classList.remove(...classesToRemove)
+    el.classList.add('sound-playing');
     const timeoutId = setTimeout(() => {
-        el.classList.add(...classesToRemove)
-        el.classList.remove(...classesToAdd)
+        el.classList.remove('sound-playing');
     }, audio.duration * 1000)
     playTimeouts[soundId] = timeoutId;
 }
@@ -164,21 +159,13 @@ const dragStart = (e: any) => {
     dragged = e.target;
     document.querySelectorAll('.droppable').forEach((el) => {
         if (isSwitching(el.id)) return;
-        const classesToAdd = ['border-sky-400']
-        const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
-
-        el.classList.add(...classesToAdd)
-        el.classList.remove(...classesToRemove)
+        el.classList.add('sound-drop-target');
     })
 }
 
 const dragEnd = () => {
     document.querySelectorAll('.droppable').forEach((el) => {
-        const classesToRemove = ['border-sky-400']
-        const classesToAdd = ['border-gray-200', 'dark:border-gray-700']
-
-        el.classList.add(...classesToAdd)
-        el.classList.remove(...classesToRemove)
+        el.classList.remove('sound-drop-target');
     })
 }
 

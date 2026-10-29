@@ -1,12 +1,10 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -28,32 +26,29 @@ type SoundMetadataStore struct {
 	mu                    sync.RWMutex
 	flushMu               sync.Mutex
 	data                  soundMetadataFile
-	filename              string
+	db                    *sql.DB
+	dirty                 map[string]uint64
 	version, savedVersion uint64
 	stop, done            chan struct{}
 	closeOnce             sync.Once
 }
 
-func newSoundMetadataStore(filename string) (*SoundMetadataStore, error) {
-	m := &SoundMetadataStore{filename: filename, data: soundMetadataFile{Version: 1, Sounds: make(map[string]SoundMetadata)}, version: 1, stop: make(chan struct{}), done: make(chan struct{})}
-	data, err := os.ReadFile(filename)
-	if err == nil {
-		if err := json.Unmarshal(data, &m.data); err != nil {
+func newSoundMetadataStore(db *sql.DB) (*SoundMetadataStore, error) {
+	m := &SoundMetadataStore{db: db, data: soundMetadataFile{Version: 1, Sounds: make(map[string]SoundMetadata)}, dirty: make(map[string]uint64), stop: make(chan struct{}), done: make(chan struct{})}
+	rows, err := db.Query("SELECT name,description,emoji_id,emoji_name FROM sound_metadata")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var entry SoundMetadata
+		if err := rows.Scan(&name, &entry.Description, &entry.EmojiID, &entry.EmojiName); err != nil {
 			return nil, err
 		}
-		if m.data.Version != 1 {
-			return nil, fmt.Errorf("invalid sound metadata format")
-		}
-		if m.data.Sounds == nil {
-			m.data.Sounds = make(map[string]SoundMetadata)
-		}
-	} else if !os.IsNotExist(err) {
-		return nil, err
+		m.data.Sounds[name] = entry
 	}
-	if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
-		return nil, err
-	}
-	if err := m.Flush(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	go func() {
@@ -96,6 +91,7 @@ func (m *SoundMetadataStore) SetDescription(name, description string) {
 	entry.Description = description
 	m.data.Sounds[name] = entry
 	m.version++
+	m.dirty[name] = m.version
 }
 func (m *SoundMetadataStore) SetEmoji(name string, id, emoji *string) bool {
 	if name == "" {
@@ -117,6 +113,7 @@ func (m *SoundMetadataStore) SetEmoji(name string, id, emoji *string) bool {
 	old.EmojiID, old.EmojiName = value.EmojiID, value.EmojiName
 	m.data.Sounds[name] = old
 	m.version++
+	m.dirty[name] = m.version
 	return true
 }
 func (m *SoundMetadataStore) ApplyEmoji(request CreateSoundboardSoundRequest) CreateSoundboardSoundRequest {
@@ -143,13 +140,36 @@ func (m *SoundMetadataStore) Flush() error {
 		return nil
 	}
 	version := m.version
-	snapshot := soundMetadataFile{Version: 1, Sounds: m.snapshotLocked()}
+	changed := make(map[string]SoundMetadata, len(m.dirty))
+	for name := range m.dirty {
+		changed[name] = m.data.Sounds[name]
+	}
 	m.mu.RUnlock()
-	if err := atomicWriteJSON(m.filename, snapshot); err != nil {
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	statement, err := tx.Prepare("INSERT INTO sound_metadata(name,description,emoji_id,emoji_name) VALUES(?,?,?,?) ON CONFLICT(name) DO UPDATE SET description=excluded.description,emoji_id=excluded.emoji_id,emoji_name=excluded.emoji_name")
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+	for name, entry := range changed {
+		if _, err = statement.Exec(name, entry.Description, entry.EmojiID, entry.EmojiName); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	m.mu.Lock()
 	m.savedVersion = version
+	for name, revision := range m.dirty {
+		if revision <= version {
+			delete(m.dirty, name)
+		}
+	}
 	m.mu.Unlock()
 	return nil
 }

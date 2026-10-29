@@ -8,10 +8,10 @@
     <link rel="shortcut icon" href="/headset.png" type="image/x-icon">
 </head>
 
-<body class="bg-white dark:bg-gray-900">
+<body>
 
     <div>
-        <div id="sounds" class="flex flex-col justify-center items-center">
+        <div id="sounds">
             <label class="ui-preview-toggle">
                 <input id="ui-preview-toggle" type="checkbox" aria-controls="library-tools">
                 Preview new UI
@@ -19,7 +19,7 @@
             <div id="playable-sounds"></div>
             <section id="library-tools" class="library-tools" aria-label="Sound library tools" hidden>
                 <label class="library-search-label" for="library-search">Search sounds</label>
-                <input id="library-search" type="search" placeholder="Search sounds…" autocomplete="off">
+                <input id="library-search" type="search" placeholder="Search sounds…" autocomplete="off" maxlength="120">
                 <div class="library-filters" role="group" aria-label="Filter sounds">
                     <button type="button" data-library-filter="all" aria-pressed="true">All</button>
                     <button type="button" data-library-filter="favorites" aria-pressed="false">Favorites</button>
@@ -29,36 +29,28 @@
             </section>
             <div id="storedsounds"></div>
             <p id="library-empty" class="library-empty" hidden>No matching sounds. Try another search or filter.</p>
-            <div class="flex flex-row">
-                <div>
-                    <label class="inline-flex items-center cursor-pointer">
-                        <input id="mute-sounds-checkbox" type="checkbox" value="" class="sr-only peer">
-                        <div
-                            class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600">
-                        </div>
-                        <span class="ms-3 text-sm font-medium text-gray-900 dark:text-white">Mute sounds</span>
-                    </label>
-                </div>
-                <div class="ml-4">
-                    <label class="inline-flex items-center cursor-pointer">
-                        <input id="play-send-sounds-checkbox" type="checkbox" value="" class="sr-only peer">
-                        <div
-                            class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600">
-                        </div>
-                        <span class="ms-3 text-sm font-medium text-gray-900 dark:text-white">Play send sounds</span>
-                    </label>
-                </div>
+            <div class="sound-settings">
+                <label class="sound-setting">
+                    <input id="mute-sounds-checkbox" type="checkbox">
+                    <span class="switch-track" aria-hidden="true"></span>
+                    <span>Mute sounds</span>
+                </label>
+                <label class="sound-setting">
+                    <input id="play-send-sounds-checkbox" type="checkbox">
+                    <span class="switch-track" aria-hidden="true"></span>
+                    <span>Play send sounds</span>
+                </label>
             </div>
             <div id="playsounddisabled"></div>
             <div id="addsoundscript"></div>
             <div id="soundmetadata"></div>
-            <div class="p-4 flex flex-row text-gray-900 dark:text-white">
-                <svg class="h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                    stroke-width="1.5" stroke="currentColor" class="size-6">
+            <div class="viewer-count">
+                <svg class="control-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                    stroke-width="1.5" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round"
                         d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                 </svg>
-                <div class="h-8 w-8 text-xl"><span id="user-count"></span></div>
+                <div class="viewer-total"><span id="user-count"></span></div>
             </div>
         </div>
     </div>
