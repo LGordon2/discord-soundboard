@@ -3,6 +3,7 @@ export type UpdateHooks = {
     library: (hidden: string[], hasEmpty: boolean) => void;
     played: (soundID: string) => void;
     updated: () => void;
+    metadata?: () => void;
 };
 
 // The server sends fragments keyed by these IDs. Apply the whole message before
@@ -13,15 +14,17 @@ export const applyBoardUpdate = (html: string, hooks: UpdateHooks) => {
     const roots: Element[] = [];
     let libraryChanged = false;
     let played: string | null = null;
+    let metadataChanged = false;
     for (const node of Array.from(template.content.children)) {
         const id = node.id;
-        if (!/^(soundboard-\d+|playable-sounds|storedsounds|addsoundscript|playsound|user-count)$/.test(id)) continue;
+        if (!/^(soundboard-\d+|playable-sounds|storedsounds|addsoundscript|playsound|user-count|soundmetadata)$/.test(id)) continue;
         // Updates are declarative; never execute scripts received over a socket.
         node.querySelectorAll('script').forEach(script => script.remove());
         if (id === 'playsound') {
             played = node.getAttribute('data-play-sound');
             continue;
         }
+        if (id === 'soundmetadata') metadataChanged = true;
         const current = document.getElementById(id);
         if (!current) continue;
         current.replaceWith(node);
@@ -37,6 +40,7 @@ export const applyBoardUpdate = (html: string, hooks: UpdateHooks) => {
         }
     }
     if (played) hooks.played(played);
+    if (metadataChanged) hooks.metadata?.();
     hooks.updated();
 };
 

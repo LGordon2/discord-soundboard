@@ -1,3 +1,5 @@
+import { recordRecentSound } from './ui-preview';
+
 type PendingSwap = {
     name: string;
     oldSoundID: string;
@@ -74,6 +76,7 @@ export const reconcileSwitches = () => {
         if (pending.accepted && soundID && soundID !== pending.oldSoundID &&
             card.getAttribute('data-soundname') === pending.name) {
             finish(id);
+            recordRecentSound(pending.name);
             announce(`${pending.name} is ready.`, false, 3500);
             continue;
         }

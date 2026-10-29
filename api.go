@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,6 +23,7 @@ type DiscordRestClient struct {
 	userID         string
 	onSoundCreated func(name string)
 	onSoundSent    func(soundID string)
+	metadata       *SoundMetadataStore
 }
 
 func NewDiscordRestClient(token, tokenType string) *DiscordRestClient {
@@ -97,9 +99,11 @@ func (c *DiscordRestClient) DeleteSoundboardSound(guildId, soundId string) error
 }
 
 type CreateSoundboardSoundRequest struct {
-	Name   string `json:"name"`
-	Sound  string `json:"sound"`
-	Volume int    `json:"volume"`
+	Name      string  `json:"name"`
+	Sound     string  `json:"sound"`
+	Volume    int     `json:"volume"`
+	EmojiID   *string `json:"emoji_id,omitempty"`
+	EmojiName *string `json:"emoji_name,omitempty"`
 }
 
 type CreateSoundboardSoundResponse struct {
@@ -125,11 +129,26 @@ func prepareSoundboardSound(name, mimeType string, data []byte) CreateSoundboard
 }
 
 func (c *DiscordRestClient) createSoundboardSound(guildId string, request CreateSoundboardSoundRequest) (CreateSoundboardSoundResponse, error) {
+	if c.metadata != nil {
+		request = c.metadata.ApplyEmoji(request)
+	}
 	start := time.Now()
 	defer func() { fmt.Printf("CreateSoundboardSound (including rate-limit waits): %v\n", time.Since(start)) }()
-	resp, err := c.discord.Request(http.MethodPost, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds", request, func(cfg *discordgo.RequestConfig) {
-		cfg.Request.Header.Set("X-Super-Properties", superProperties)
-	})
+	post := func() ([]byte, error) {
+		return c.discord.Request(http.MethodPost, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds", request, func(cfg *discordgo.RequestConfig) {
+			cfg.Request.Header.Set("X-Super-Properties", superProperties)
+		})
+	}
+	resp, err := post()
+	if err != nil && (request.EmojiID != nil || request.EmojiName != nil) && invalidSoundEmoji(err) {
+		// A deleted/unavailable custom emoji must not prevent restoring the audio.
+		request.EmojiID, request.EmojiName = nil, nil
+		if c.metadata != nil {
+			c.metadata.SetEmoji(request.Name, nil, nil)
+		}
+		log.Printf("[warn] Discord rejected a stored emoji; retrying the sound upload without it")
+		resp, err = post()
+	}
 	if err != nil {
 		return CreateSoundboardSoundResponse{}, err
 	}
@@ -140,4 +159,20 @@ func (c *DiscordRestClient) createSoundboardSound(guildId string, request Create
 		c.onSoundCreated(request.Name)
 	}
 	return soundboardResponse, err
+}
+
+func invalidSoundEmoji(err error) bool {
+	var restError *discordgo.RESTError
+	if !errors.As(err, &restError) || restError.Response == nil || restError.Response.StatusCode != http.StatusBadRequest {
+		return false
+	}
+	var details struct {
+		Errors map[string]json.RawMessage `json:"errors"`
+	}
+	if json.Unmarshal(restError.ResponseBody, &details) != nil {
+		return false
+	}
+	_, custom := details.Errors["emoji_id"]
+	_, unicode := details.Errors["emoji_name"]
+	return custom || unicode
 }

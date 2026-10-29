@@ -6,15 +6,29 @@
     <link href="index.css" rel="stylesheet" />
     <title>Discord Soundboard</title>
     <link rel="shortcut icon" href="/headset.png" type="image/x-icon">
-    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 
 <body class="bg-white dark:bg-gray-900">
 
     <div>
         <div id="sounds" class="flex flex-col justify-center items-center">
+            <label class="ui-preview-toggle">
+                <input id="ui-preview-toggle" type="checkbox" aria-controls="library-tools">
+                Preview new UI
+            </label>
             <div id="playable-sounds"></div>
+            <section id="library-tools" class="library-tools" aria-label="Sound library tools" hidden>
+                <label class="library-search-label" for="library-search">Search sounds</label>
+                <input id="library-search" type="search" placeholder="Search sounds…" autocomplete="off">
+                <div class="library-filters" role="group" aria-label="Filter sounds">
+                    <button type="button" data-library-filter="all" aria-pressed="true">All</button>
+                    <button type="button" data-library-filter="favorites" aria-pressed="false">Favorites</button>
+                    <button type="button" data-library-filter="recent" aria-pressed="false">Recently used</button>
+                </div>
+                <span id="library-count" role="status"></span>
+            </section>
             <div id="storedsounds"></div>
+            <p id="library-empty" class="library-empty" hidden>No matching sounds. Try another search or filter.</p>
             <div class="flex flex-row">
                 <div>
                     <label class="inline-flex items-center cursor-pointer">
@@ -37,6 +51,7 @@
             </div>
             <div id="playsounddisabled"></div>
             <div id="addsoundscript"></div>
+            <div id="soundmetadata"></div>
             <div class="p-4 flex flex-row text-gray-900 dark:text-white">
                 <svg class="h-8 w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                     stroke-width="1.5" stroke="currentColor" class="size-6">
@@ -47,6 +62,20 @@
             </div>
         </div>
     </div>
+    <dialog id="sound-details" aria-labelledby="sound-details-title">
+        <form id="sound-details-form">
+            <h2 id="sound-details-title">Sound details</h2>
+            <p id="sound-details-name"></p>
+            <label for="sound-description">Description or source</label>
+            <textarea id="sound-description" maxlength="2000" rows="5" placeholder="What is this sound? Where is it from?"></textarea>
+            <p class="details-help">Saved on the server and shared with everyone using this soundboard.</p>
+            <p id="sound-details-error" role="alert"></p>
+            <div class="details-actions">
+                <button id="close-sound-details" type="button">Cancel</button>
+                <button id="save-sound-details" type="submit">Save description</button>
+            </div>
+        </form>
+    </dialog>
     <script type="module" src="/index.ts">
     </script>
 </body>

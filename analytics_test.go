@@ -76,7 +76,7 @@ func TestAnalyticsPersistenceAndConcurrentRecording(t *testing.T) {
 	if saved.Totals.Sent != 1001 {
 		t.Fatalf("file not updated: %s", data)
 	}
-	leftovers, _ := filepath.Glob(filepath.Join(filepath.Dir(filename), ".analytics-*.tmp"))
+	leftovers, _ := filepath.Glob(filepath.Join(filepath.Dir(filename), ".soundboard-*.tmp"))
 	if len(leftovers) != 0 {
 		t.Fatalf("temporary files left behind: %v", leftovers)
 	}

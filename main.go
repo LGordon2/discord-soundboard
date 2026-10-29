@@ -31,10 +31,12 @@ type UserData struct {
 }
 
 type SoundData struct {
-	SoundID string `json:"sound_id"`
-	Name    string `json:"name"`
-	UserID  string `json:"user_id"`
-	User    UserData
+	SoundID   string `json:"sound_id"`
+	Name      string `json:"name"`
+	UserID    string `json:"user_id"`
+	User      UserData
+	EmojiID   *string `json:"emoji_id"`
+	EmojiName *string `json:"emoji_name"`
 }
 
 type VoiceState struct {
@@ -157,6 +159,16 @@ func main() {
 	}
 	discordClient := NewDiscordRestClient(authToken, "")
 
+	metadataFile := os.Getenv("SOUND_METADATA_FILE")
+	if metadataFile == "" {
+		metadataFile = filepath.Join("data", "sound-metadata.json")
+	}
+	metadata, metadataErr := newSoundMetadataStore(metadataFile)
+	if metadataErr != nil {
+		log.Printf("[warn] sound metadata unavailable: %v", metadataErr)
+	}
+	discordClient.metadata = metadata
+
 	analyticsFile := os.Getenv("ANALYTICS_FILE")
 	if analyticsFile == "" {
 		analyticsFile = filepath.Join("data", "analytics.json")
@@ -187,12 +199,21 @@ func main() {
 			}
 			analytics.Record("sent", name)
 		}
+	}
+	if analytics != nil || metadata != nil {
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			<-signals
-			if err := analytics.Close(); err != nil {
-				log.Printf("[warn] flushing analytics on shutdown: %v", err)
+			if analytics != nil {
+				if err := analytics.Close(); err != nil {
+					log.Printf("[warn] flushing analytics on shutdown: %v", err)
+				}
+			}
+			if metadata != nil {
+				if err := metadata.Close(); err != nil {
+					log.Printf("[warn] flushing metadata on shutdown: %v", err)
+				}
 			}
 			os.Exit(0)
 		}()
@@ -202,6 +223,30 @@ func main() {
 	http.Handle("/analytics/play", analyticsRoutes)
 
 	msgUpdates := make(chan []byte, 100)
+	publishMetadata := func() { msgUpdates <- []byte(`<div id="soundmetadata" data-refresh="true"></div>`) }
+	http.Handle("/sound-metadata", soundMetadataHandler(metadata, func(name string) bool {
+		if name == "" {
+			return false
+		}
+		soundsMu.RLock()
+		for _, sound := range sounds {
+			if sound.Name == name {
+				soundsMu.RUnlock()
+				return true
+			}
+		}
+		soundsMu.RUnlock()
+		if path.Base(name) != name {
+			return false
+		}
+		for _, extension := range []string{".ogg", ".mp3"} {
+			if info, err := os.Stat(path.Join(soundsDir, name+extension)); err == nil && !info.IsDir() {
+				return true
+			}
+		}
+		return false
+	}, publishMetadata))
+
 	soundUpdates := make(chan []SoundboardSoundWithOrdinal, 100)
 	clients := make(map[*websocket.Conn]chan []byte)
 	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
@@ -772,7 +817,11 @@ func main() {
 				}
 			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && dmd.GuildID == guildID {
 				incoming := make([]SoundboardSound, 0, len(dmd.SoundboardSounds))
+				metadataChanged := false
 				for _, sound := range dmd.SoundboardSounds {
+					if metadata != nil && metadata.SetEmoji(sound.Name, sound.EmojiID, sound.EmojiName) {
+						metadataChanged = true
+					}
 					if sound.User.Avatar != "" {
 						old := userInfoCache[sound.UserID]
 						old.Avatar = sound.User.Avatar
@@ -786,13 +835,16 @@ func main() {
 				soundsMu.Unlock()
 				// Publish readiness before optional CDN downloads and library rescans.
 				soundUpdates <- newUpdates
+				if metadataChanged {
+					publishMetadata()
+				}
 				for _, sound := range newSounds {
 					if sound.ID != "" && !storedSoundMap.containsName(sound.Name) {
 						fmt.Printf("attempting to save new sound %v\n", sound.Name)
 						saveSoundFunc(sound.ID, sound.Name)
 					}
 				}
-			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
+			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" || *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_UPDATE" {
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
 				fetchSoundboardSounds()
 			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_DELETE" {

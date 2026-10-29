@@ -139,26 +139,7 @@ func (a *LocalAnalytics) Flush() error {
 	version := a.version
 	snapshot := a.snapshotLocked()
 	a.mu.RUnlock()
-	data, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return err
-	}
-	file, err := os.CreateTemp(filepath.Dir(a.filename), ".analytics-*.tmp")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(file.Name())
-	defer file.Close()
-	if _, err = file.Write(append(data, '\n')); err != nil {
-		return err
-	}
-	if err = file.Sync(); err != nil {
-		return err
-	}
-	if err = file.Close(); err != nil {
-		return err
-	}
-	if err = os.Rename(file.Name(), a.filename); err != nil {
+	if err := atomicWriteJSON(a.filename, snapshot); err != nil {
 		return err
 	}
 	a.mu.Lock()

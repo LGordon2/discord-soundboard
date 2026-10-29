@@ -1,0 +1,125 @@
+type SoundMetadata = { description: string; emoji_id?: string; emoji_name?: string };
+let metadata: Record<string, SoundMetadata> = {};
+let onUpdate = () => {};
+let requestVersion = 0;
+
+export const getSoundMetadata = (name: string): SoundMetadata | undefined => metadata[name];
+
+const applyMetadata = (value: unknown) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const next: Record<string, SoundMetadata> = {};
+    for (const [name, entry] of Object.entries(value)) {
+        if (!entry || typeof entry !== 'object' || typeof entry.description !== 'string') continue;
+        next[name] = {
+            description: entry.description,
+            ...(typeof entry.emoji_id === 'string' ? { emoji_id: entry.emoji_id } : {}),
+            ...(typeof entry.emoji_name === 'string' ? { emoji_name: entry.emoji_name } : {}),
+        };
+    }
+    metadata = next;
+    decorateSoundMetadata(document);
+    onUpdate();
+};
+
+export const refreshSoundMetadata = async () => {
+    const version = ++requestVersion;
+    try {
+        const response = await fetch('/sound-metadata', { signal: AbortSignal.timeout(10000) });
+        if (response.ok) {
+            const values: unknown = await response.json();
+            if (version === requestVersion) applyMetadata(values);
+        }
+    } catch { /* Sound controls remain usable when details are unavailable. */ }
+};
+
+export const decorateSoundMetadata = (root: ParentNode) => {
+    const cards = Array.from(root.querySelectorAll<HTMLElement>('[data-soundname]'));
+    if (root instanceof HTMLElement && root.matches('[data-soundname]')) cards.unshift(root);
+    const enabled = document.body.classList.contains('ui-preview');
+    for (const card of cards) {
+        const name = card.getAttribute('data-soundname') || '';
+        if (!name) continue;
+        const entry = metadata[name];
+        // Rebuild only metadata decorations; leave controls and their state intact.
+        card.querySelectorAll('.sound-emoji, .sound-description, [data-edit-description]').forEach(node => node.remove());
+        if (!enabled) { card.removeAttribute('title'); continue; }
+        const header = card.querySelector<HTMLElement>('.flex-row');
+        if (!header) continue;
+        const edit = document.createElement('button');
+        edit.type = 'button';
+        edit.className = 'sound-details-button';
+        edit.setAttribute('data-edit-description', name);
+        edit.setAttribute('aria-label', `Edit description: ${name}`);
+        edit.title = 'Sound description and source';
+        edit.textContent = 'ⓘ';
+        header.append(edit);
+        if (entry?.description) {
+            card.title = entry.description;
+            if (card.classList.contains('add-sound-component')) {
+                const description = document.createElement('p');
+                description.className = 'sound-description';
+                description.textContent = entry.description;
+                card.append(description);
+            }
+        } else { card.removeAttribute('title'); }
+        const heading = card.querySelector('h5');
+        if (heading && (entry?.emoji_id || entry?.emoji_name)) {
+            const emoji = document.createElement('span');
+            emoji.className = 'sound-emoji';
+            if (entry.emoji_id && /^\d+$/.test(entry.emoji_id)) {
+                const image = document.createElement('img');
+                image.src = `https://cdn.discordapp.com/emojis/${entry.emoji_id}.webp?size=32`;
+                image.alt = 'Custom emoji';
+                image.loading = 'lazy';
+                emoji.append(image);
+            } else { emoji.textContent = entry.emoji_name || ''; }
+            heading.prepend(emoji);
+        }
+    }
+};
+
+export const initSoundMetadata = (updated: () => void) => {
+    onUpdate = updated;
+    const dialog = document.getElementById('sound-details') as HTMLDialogElement | null;
+    const form = document.getElementById('sound-details-form') as HTMLFormElement | null;
+    const input = document.getElementById('sound-description') as HTMLTextAreaElement | null;
+    const error = document.getElementById('sound-details-error');
+    const title = document.getElementById('sound-details-name');
+    const save = document.getElementById('save-sound-details') as HTMLButtonElement | null;
+    if (!dialog || !form || !input || !error || !title || !save) return;
+    let name = '';
+    let saving = false;
+    document.addEventListener('click', event => {
+        const button = event.target instanceof Element ? event.target.closest('[data-edit-description]') : null;
+        if (!button || saving || button.closest('[inert]')) return;
+        name = button.getAttribute('data-edit-description') || '';
+        title.textContent = name;
+        input.value = metadata[name]?.description || '';
+        error.textContent = '';
+        dialog.showModal();
+        input.focus();
+    });
+    document.getElementById('close-sound-details')?.addEventListener('click', () => { if (!saving) dialog.close(); });
+    dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (saving) return;
+        saving = true;
+        save.disabled = true;
+        save.textContent = 'Saving…';
+        error.textContent = '';
+        ++requestVersion; // Invalidate a metadata fetch started before this edit.
+        try {
+            const response = await fetch('/sound-metadata', {
+                method: 'PUT', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ soundName: name, description: input.value }),
+                signal: AbortSignal.timeout(10000),
+            });
+            if (!response.ok) throw new Error('Save failed');
+            applyMetadata(await response.json());
+            dialog.close();
+        } catch { error.textContent = 'Could not save the description. Please try again.'; }
+        finally { saving = false; save.disabled = false; save.textContent = 'Save description'; }
+    });
+    void refreshSoundMetadata();
+};

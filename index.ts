@@ -3,6 +3,8 @@
 import { enableDragDropTouch } from '@dragdroptouch/drag-drop-touch';
 import { isSwitching, switchSound, reconcileSwitches } from './swap-feedback';
 import { connectBoard } from './live-updates';
+import { initUIPreview, syncLibraryPreview, recordRecentSound } from './ui-preview';
+import { initSoundMetadata, decorateSoundMetadata, refreshSoundMetadata } from './sound-metadata';
 
 const playTimeouts: Record<string, any> = {};
 (window as any)._addStats = {};
@@ -120,6 +122,7 @@ const playSound = (elId: any, soundId: string, sent: boolean) => {
     // automatic local echoes of sends to Discord.
     if (!sent) {
         audio.addEventListener('playing', () => {
+            recordRecentSound(document.getElementById(elId)?.getAttribute('data-soundname') || '');
             void fetch('/analytics/play', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
@@ -191,8 +194,9 @@ const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
         } else {
             el.classList.remove('hidden');
         }
-        disableFn(el.querySelector('button'));
+        disableFn(el.querySelector('button[data-action="add"]'));
     });
+    syncLibraryPreview();
 }
 
 // TODO this is pretty much the same as play sound
@@ -224,6 +228,7 @@ const hydrate = (root: Element) => {
                 play: 'Play in Discord', headphones: 'Preview sound' } as Record<string, string>)[icon || ''] || 'Sound control');
         }
     });
+    decorateSoundMetadata(root);
 };
 
 const showActionError = () => {
@@ -281,6 +286,8 @@ document.addEventListener('click', async event => {
     try {
         const response = await fetch(`${endpoint}?${query}`, { method });
         if (!response.ok) throw new Error('Sound action failed');
+        if (action === 'send') recordRecentSound(card?.getAttribute('data-soundname') || '');
+        if (action === 'add') recordRecentSound(button.closest('.add-sound-component')?.getAttribute('data-soundname') || '');
         document.getElementById('action-status')?.replaceChildren();
     } catch {
         showActionError();
@@ -316,12 +323,15 @@ document.addEventListener('drop', event => {
 document.getElementById('mute-sounds-checkbox')?.addEventListener('change', muteSounds);
 document.getElementById('play-send-sounds-checkbox')?.addEventListener('change', playSendSounds);
 
+initUIPreview();
+initSoundMetadata(syncLibraryPreview);
 enableDragDropTouch();
 connectBoard({
     hydrate,
     library: addSoundUpdates,
     played: soundID => playSound(null, soundID, true),
     updated: reconcileSwitches,
+    metadata: () => { void refreshSoundMetadata(); },
 });
 
 (async () => {
