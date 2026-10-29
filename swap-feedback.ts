@@ -18,10 +18,30 @@ const announce = (message: string, error = false, dismissAfter = 0) => {
         status.setAttribute('aria-live', 'polite');
         document.body.append(status);
     }
+    const dismiss = () => {
+        clearTimeout(announcementTimer);
+        status.replaceChildren();
+    };
     status.classList.toggle('swap-error', error);
-    status.textContent = message;
+    const text = document.createElement('span');
+    text.textContent = message;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'toast-close';
+    close.setAttribute('aria-label', 'Dismiss notification');
+    close.textContent = '×';
+    close.addEventListener('click', dismiss);
+    status.replaceChildren(text, close);
     if (dismissAfter > 0) {
-        announcementTimer = setTimeout(() => { status.textContent = ''; }, dismissAfter);
+        const progress = document.createElement('div');
+        progress.className = 'toast-countdown';
+        progress.setAttribute('aria-hidden', 'true');
+        progress.style.animationDuration = `${dismissAfter}ms`;
+        status.title = `Dismisses automatically in ${dismissAfter / 1000} seconds`;
+        status.append(progress);
+        announcementTimer = setTimeout(dismiss, dismissAfter);
+    } else {
+        status.removeAttribute('title');
     }
 };
 

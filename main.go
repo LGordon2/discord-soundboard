@@ -725,68 +725,27 @@ func main() {
 					}
 				}
 			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && dmd.GuildID == guildID {
-				newSounds := [soundboardSoundCount]SoundboardSound{}
-
-				emptyPositions := []int{}
-				soundMap := make(map[string]int)
-				soundsMu.RLock()
-				for i, sound := range sounds {
-					if sound == (SoundboardSound{}) {
-						emptyPositions = append(emptyPositions, i)
-					} else {
-						soundMap[sound.ID] = i
+				incoming := make([]SoundboardSound, 0, len(dmd.SoundboardSounds))
+				for _, sound := range dmd.SoundboardSounds {
+					if sound.User.Avatar != "" {
+						old := userInfoCache[sound.UserID]
+						old.Avatar = sound.User.Avatar
+						userInfoCache[sound.UserID] = old
 					}
-				}
-				soundsMu.RUnlock()
-
-				newUpdates := []SoundboardSoundWithOrdinal{}
-				for _, soundboardSound := range dmd.SoundboardSounds {
-					id := soundboardSound.SoundID
-					name := soundboardSound.Name
-
-					userID := soundboardSound.UserID
-					if soundboardSound.User.Avatar != "" {
-						avatar := soundboardSound.User.Avatar
-						old := userInfoCache[userID]
-						old.Avatar = avatar
-						userInfoCache[userID] = old
-					}
-					newSound := SoundboardSound{Name: name, ID: id, UserID: userID, Avatar: soundboardSound.User.Avatar}
-
-					// check if new sound is in sounds, if so place in same spot
-					if pos, ok := soundMap[newSound.ID]; ok { // sound was already present
-						newSounds[pos] = newSound
-					} else { // otherwise place in first available spot
-						if len(emptyPositions) > 0 {
-							emptyPos := emptyPositions[0]
-							emptyPositions = emptyPositions[1:]
-							newSounds[emptyPos] = newSound
-							// send updates for any sounds added
-							newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
-								ordinal:         emptyPos,
-								SoundboardSound: newSound,
-							})
-						}
-					}
-				}
-				// send updates for any sounds removed
-				for i, newSound := range newSounds {
-					if newSound == (SoundboardSound{}) {
-						newUpdates = append(newUpdates, SoundboardSoundWithOrdinal{
-							ordinal: i,
-						})
-					} else {
-						// if we detect a new sound that we don't have try to save it.
-						if !storedSoundMap.containsName(newSound.Name) {
-							fmt.Printf("attempting to save new sound %v\n", newSound.Name)
-							saveSoundFunc(newSound.ID, newSound.Name)
-						}
-					}
+					incoming = append(incoming, SoundboardSound{Name: sound.Name, ID: sound.SoundID, UserID: sound.UserID, Avatar: sound.User.Avatar})
 				}
 				soundsMu.Lock()
+				newSounds, newUpdates := reconcileSounds(sounds, incoming)
 				sounds = newSounds
 				soundsMu.Unlock()
+				// Publish readiness before optional CDN downloads and library rescans.
 				soundUpdates <- newUpdates
+				for _, sound := range newSounds {
+					if sound.ID != "" && !storedSoundMap.containsName(sound.Name) {
+						fmt.Printf("attempting to save new sound %v\n", sound.Name)
+						saveSoundFunc(sound.ID, sound.Name)
+					}
+				}
 			} else if *recvMsg.Type == "GUILD_SOUNDBOARD_SOUND_CREATE" {
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
 				fetchSoundboardSounds()

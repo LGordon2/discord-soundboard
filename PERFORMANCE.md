@@ -78,3 +78,15 @@ Validation includes DOM integration checks against the production bundle for
 button requests, URL encoding, disabled permissions, drag/drop, socket reconnects,
 fragment order, and switching through intermediate cards. Successful ready
 messages clear after 3.5 seconds. The loading spinner rotates continuously.
+
+Full snapshots now reserve retained sound IDs before assigning additions to slots
+freed by removed IDs. A replacement can therefore appear even if no intermediate
+delete-only snapshot was received. Metadata changes also produce card updates,
+and identical snapshots no longer resend unchanged cards. Board state is
+published before optional CDN archiving, so downloading a newly discovered sound
+does not hold up its readiness indication. Regression tests cover full-board
+replacement, metadata/deletion deltas, repeated snapshots, and duplicate IDs.
+
+Floating notifications now include an accessible close button. Timed success
+messages show a shrinking countdown bar over their 3.5-second lifetime; errors
+remain until dismissed or replaced.
