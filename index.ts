@@ -116,6 +116,18 @@ const playSound = (elId: any, soundId: string, sent: boolean) => {
     }
     const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
     playingAudio[soundId] = audio;
+    // Count actual user previews once, excluding muted/failed playback and the
+    // automatic local echoes of sends to Discord.
+    if (!sent) {
+        audio.addEventListener('playing', () => {
+            void fetch('/analytics/play', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ soundID: soundId }),
+                keepalive: true,
+            }).catch(() => { /* Analytics must never interrupt playback. */ });
+        }, { once: true });
+    }
     let el = undefined;
     if (elId) {
         el = document.querySelector('#' + elId)

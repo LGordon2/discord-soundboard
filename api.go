@@ -17,9 +17,11 @@ const (
 )
 
 type DiscordRestClient struct {
-	token   string
-	discord *discordgo.Session
-	userID  string
+	token          string
+	discord        *discordgo.Session
+	userID         string
+	onSoundCreated func(name string)
+	onSoundSent    func(soundID string)
 }
 
 func NewDiscordRestClient(token, tokenType string) *DiscordRestClient {
@@ -79,6 +81,9 @@ func (c *DiscordRestClient) SendSoundboardSound(guildId, channelId, soundId stri
 	}, func(cfg *discordgo.RequestConfig) {
 		cfg.Request.Header.Set("X-Super-Properties", superProperties)
 	})
+	if err == nil && c.onSoundSent != nil {
+		c.onSoundSent(soundId)
+	}
 	return err
 }
 
@@ -131,5 +136,8 @@ func (c *DiscordRestClient) createSoundboardSound(guildId string, request Create
 
 	var soundboardResponse CreateSoundboardSoundResponse
 	err = json.Unmarshal(resp, &soundboardResponse)
+	if err == nil && c.onSoundCreated != nil {
+		c.onSoundCreated(request.Name)
+	}
 	return soundboardResponse, err
 }

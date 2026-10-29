@@ -8,12 +8,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -154,6 +156,50 @@ func main() {
 		panic(err)
 	}
 	discordClient := NewDiscordRestClient(authToken, "")
+
+	analyticsFile := os.Getenv("ANALYTICS_FILE")
+	if analyticsFile == "" {
+		analyticsFile = filepath.Join("data", "analytics.json")
+	}
+	analytics, err := newLocalAnalytics(analyticsFile)
+	if err != nil {
+		log.Printf("[warn] local analytics disabled: %v", err)
+	}
+	soundName := func(id string) (string, bool) {
+		if id == "" {
+			return "", false
+		}
+		soundsMu.RLock()
+		defer soundsMu.RUnlock()
+		for _, sound := range sounds {
+			if sound.ID == id {
+				return sound.Name, true
+			}
+		}
+		return "", false
+	}
+	if analytics != nil {
+		discordClient.onSoundCreated = func(name string) { analytics.Record("added", name) }
+		discordClient.onSoundSent = func(id string) {
+			name, ok := soundName(id)
+			if !ok {
+				name = "sound:" + id
+			}
+			analytics.Record("sent", name)
+		}
+		signals := make(chan os.Signal, 1)
+		signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-signals
+			if err := analytics.Close(); err != nil {
+				log.Printf("[warn] flushing analytics on shutdown: %v", err)
+			}
+			os.Exit(0)
+		}()
+	}
+	analyticsRoutes := analyticsHandler(analytics, soundName)
+	http.Handle("/analytics", analyticsRoutes)
+	http.Handle("/analytics/play", analyticsRoutes)
 
 	msgUpdates := make(chan []byte, 100)
 	soundUpdates := make(chan []SoundboardSoundWithOrdinal, 100)

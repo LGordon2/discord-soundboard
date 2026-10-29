@@ -6,3 +6,4 @@ sound-archive
 .vscode
 dist/
 node_modules/
+data/

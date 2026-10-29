@@ -30,3 +30,31 @@ Build the frontend with `pnpm build` (Node 24 is available on the service host),
 and run `tsc --noEmit`, `go test ./...`, and `go vet ./...` for checks. Deploy
 frontend and backend together when changing the fragment protocol, and refresh
 existing browser tabs. The systemd service serves `dist` from this checkout.
+
+## Local analytics
+
+`/analytics` returns totals and per-sound counters as JSON:
+
+- `added`: successful Discord uploads through this app, including replacements.
+- `sent`: successful sends to Discord, once per operation even if DiscordGo retries.
+- `played`: user-initiated browser previews when playback actually starts. Muted or
+  failed previews and automatic playback of sent sounds do not count.
+
+The service stores aggregates in `data/analytics.json` relative to its working
+directory. Set `ANALYTICS_FILE` to choose another path. On this host the default is
+`/home/lew/dev/discord-soundboard/data/analytics.json`. The file is excluded from
+Git, uses owner-only permissions, and survives rebuilds and service restarts.
+
+Counters are saved every five seconds using atomic file replacement, and flushed
+on SIGTERM/SIGINT. An abrupt kill or power loss can lose the last few seconds.
+Recording does not wait for disk writes. Storage errors are logged without
+breaking sound controls; a corrupt existing file is preserved and analytics stay
+disabled until it is repaired. If a later write fails, memory counters remain and
+persistence retries on the next interval.
+
+Counts start at installation; no historical counts are inferred. Sound names
+identify aggregate rows, so renamed sounds get separate rows. Sends whose sound
+name is not in the current board use `sound:<id>`. No IP addresses, cookies, user
+identifiers, or audio are collected. Preview reports are best effort and are not
+audited usage records. The JSON endpoint is visible to anyone who can access this
+soundboard, and shows sound names/counts without identifying listeners.
