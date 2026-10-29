@@ -1,6 +1,7 @@
 import * as amplitude from '@amplitude/analytics-browser';
 import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
 import { enableDragDropTouch } from '@dragdroptouch/drag-drop-touch';
+import { isSwitching, switchSound } from './swap-feedback';
 
 const playTimeouts: Record<string, any> = {};
 (window as any)._addStats = {};
@@ -146,6 +147,7 @@ let dragged: HTMLElement | null = null;
 const dragStart = (e: any) => {
     dragged = e.target;
     document.querySelectorAll('.droppable').forEach((el) => {
+        if (isSwitching(el.id)) return;
         const classesToAdd = ['border-sky-400']
         const classesToRemove = ['border-gray-200', 'dark:border-gray-700']
 
@@ -172,36 +174,13 @@ const makeDroppable = (el: any) => {
 
     target.addEventListener('drop', (event: any) => {
         event.preventDefault();
-        let target = event.target;
         event.stopImmediatePropagation();
-        while (!target.classList.contains('droppable')) {
-            target = target.parentNode;
-        }
-        if (dragged !== null && target.classList.contains('droppable')) {
-
-            const soundLocation = dragged.getAttribute('data-soundname');
-            const soundExtension = dragged.getAttribute('data-soundext');
-            if (soundLocation && soundExtension) {
-                const soundID = target.getAttribute('data-soundid');
-                const body: any = {
-                    add: {
-                        soundLocation: (soundLocation + soundExtension)
-                    }
-                };
-                if (soundID != null && soundID !== '') {
-                    body.delete = {
-                        soundID,
-                    };
-                }
-
-                fetch('/swap-sound', {
-                    method: 'POST',
-                    headers: {
-                        'content-type': 'application/json'
-                    },
-                    body: JSON.stringify(body)
-                });
-            }
+        const target = el as HTMLElement;
+        if (!dragged || isSwitching(target.id)) return;
+        const soundName = dragged.getAttribute('data-soundname');
+        const soundExtension = dragged.getAttribute('data-soundext');
+        if (soundName && soundExtension) {
+            void switchSound(target, soundName, soundExtension);
         }
     })
 }
