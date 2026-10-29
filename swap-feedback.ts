@@ -6,8 +6,10 @@ type PendingSwap = {
 };
 
 const pendingSwaps = new Map<string, PendingSwap>();
+let announcementTimer: ReturnType<typeof setTimeout> | undefined;
 
-const announce = (message: string, error = false) => {
+const announce = (message: string, error = false, dismissAfter = 0) => {
+    clearTimeout(announcementTimer);
     let status = document.getElementById('swap-status');
     if (!status) {
         status = document.createElement('div');
@@ -18,6 +20,9 @@ const announce = (message: string, error = false) => {
     }
     status.classList.toggle('swap-error', error);
     status.textContent = message;
+    if (dismissAfter > 0) {
+        announcementTimer = setTimeout(() => { status.textContent = ''; }, dismissAfter);
+    }
 };
 
 const clearCard = (id: string) => {
@@ -41,15 +46,15 @@ const finish = (id: string) => {
 
 // Discord sends intermediate empty cards over the WebSocket. Reapply the
 // overlay to replacement DOM nodes until both HTTP and the new card confirm.
-const reconcile = () => {
+export const reconcileSwitches = () => {
     for (const [id, pending] of pendingSwaps) {
         const card = document.getElementById(id);
         if (!card) continue;
         const soundID = card.getAttribute('data-soundid');
         if (pending.accepted && soundID && soundID !== pending.oldSoundID &&
-            card.querySelector('h5')?.textContent?.trim() === pending.name) {
+            card.getAttribute('data-soundname') === pending.name) {
             finish(id);
-            announce(`${pending.name} is ready.`);
+            announce(`${pending.name} is ready.`, false, 3500);
             continue;
         }
         if (card.querySelector('.switch-overlay')) continue;
@@ -73,8 +78,6 @@ const reconcile = () => {
     }
 };
 
-new MutationObserver(reconcile).observe(document.body, { childList: true, subtree: true });
-
 export const isSwitching = (id: string) => pendingSwaps.has(id);
 
 export const switchSound = async (card: HTMLElement, name: string, extension: string) => {
@@ -84,7 +87,7 @@ export const switchSound = async (card: HTMLElement, name: string, extension: st
     const pending: PendingSwap = { name, oldSoundID, accepted: false };
     pendingSwaps.set(id, pending);
     announce(`Switching to ${name}…`);
-    reconcile();
+    reconcileSwitches();
     try {
         const response = await fetch('/swap-sound', {
             method: 'POST',
@@ -101,7 +104,7 @@ export const switchSound = async (card: HTMLElement, name: string, extension: st
             finish(id);
             announce(`${name} was uploaded, but the board has not updated. Refresh to sync with Discord.`, true);
         }, 20000);
-        reconcile();
+        reconcileSwitches();
     } catch {
         finish(id);
         announce(`Could not confirm the switch to ${name}. Refresh to check the board before trying again.`, true);

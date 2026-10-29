@@ -62,3 +62,19 @@ This is a small local saving, not an explanation for multi-second Discord delays
 The race-enabled test binary compiled but could not execute on this host:
 ThreadSanitizer reports `unsupported VMA range` (`Found 39 - Supported 48`).
 Race validation therefore remains unavailable on this ARM64 configuration.
+
+## Browser update overhead
+
+HTMX and its WebSocket extension have been replaced by native fetch, delegated
+controls, and targeted WebSocket fragment updates. This removes two runtime CDN
+scripts, per-card event initialization, injected update scripts, and the global
+DOM mutation observer used by switching feedback. Empty cards are emitted once,
+and library filtering scans past free slots. The production JavaScript bundle is
+about 19 kB before gzip (6.3 kB gzipped), including the existing touch drag helper;
+HTMX is no longer loaded separately. This affects browser overhead and startup,
+not Discord's two API operations or rate limits.
+
+Validation includes DOM integration checks against the production bundle for
+button requests, URL encoding, disabled permissions, drag/drop, socket reconnects,
+fragment order, and switching through intermediate cards. Successful ready
+messages clear after 3.5 seconds. The loading spinner rotates continuously.

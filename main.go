@@ -2,11 +2,10 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
+	htmlEscape "html"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"path"
@@ -96,7 +95,7 @@ func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) s
 		hiddenTooltip = uploadedByComponent(username, avatarCDN)
 	}
 
-	return fmt.Sprintf(`<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'minus')" class="flex flex-1 peer items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s></button>%s`, textColor, soundId, guildId, disabledProp, hiddenTooltip)
+	return fmt.Sprintf(`<button data-action="delete" data-icon="minus" class="flex flex-1 peer items-center justify-center mt-1 %s" data-soundid="%s" data-guildid="%s" %s></button>%s`, textColor, soundId, guildId, disabledProp, hiddenTooltip)
 }
 
 func fetchStoredSounds() ([]string, storedSoundMap, error) {
@@ -165,6 +164,7 @@ func main() {
 		for _, sound := range newSounds {
 			if sound.SoundboardSound == (SoundboardSound{}) {
 				buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, true, nil))
+				continue
 			}
 			disabled := sound.UserID != discordClient.userID
 			cannotSave := storedSoundMap.containsName(sound.Name)
@@ -180,19 +180,15 @@ func main() {
 		for _, sound := range sounds {
 			if sound == (SoundboardSound{}) {
 				hasEmpty = true
-				break
+				continue
 			}
 
-			hiddenSounds = append(hiddenSounds, "\""+strings.ReplaceAll(sound.Name, "\"", "\\\"")+"\"") // just in case a sound has quotes
+			encodedName, _ := json.Marshal(sound.Name)
+			hiddenSounds = append(hiddenSounds, string(encodedName))
 		}
 		soundsMu.RUnlock()
 		hiddenSoundString := "[" + strings.Join(hiddenSounds, ",") + "]"
-		hasEmptyString := "false"
-		if hasEmpty {
-			hasEmptyString = "true"
-		}
-
-		buf.WriteString(`<div id="addsoundscript"><script type="text/javascript">window._addSoundUpdates(` + hiddenSoundString + `, ` + hasEmptyString + `)</script></div>`)
+		buf.WriteString(fmt.Sprintf(`<div id="addsoundscript" data-hidden-sounds="%s" data-has-empty="%t"></div>`, htmlEscape.EscapeString(hiddenSoundString), hasEmpty))
 
 		var minifiedBuf bytes.Buffer
 		m.Minify("text/html", &minifiedBuf, &buf)
@@ -260,7 +256,7 @@ func main() {
 			return
 		}
 
-		playSoundPayload := []byte("<div id=\"playsound\"><script>window._playSound(null, '" + soundID + "', true)</script></div>")
+		playSoundPayload := []byte("<div id=\"playsound\" data-play-sound=\"" + htmlEscape.EscapeString(soundID) + "\"></div>")
 		mu.RLock()
 		for _, clientChan := range clients {
 			select {
@@ -371,6 +367,8 @@ func main() {
 		waitChan := make(chan struct{})
 
 		go func() {
+			defer close(waitChan)
+			defer c.Close()
 			ticker := time.NewTicker(5 * time.Second)
 			defer ticker.Stop()
 
@@ -379,20 +377,18 @@ func main() {
 				select {
 				case <-ticker.C:
 					err = c.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(2*time.Second))
-				case sound := <-soundChan:
+				case sound, ok := <-soundChan:
+					if !ok {
+						return
+					}
 					c.SetWriteDeadline(time.Now().Add(10 * time.Second))
 					err = c.WriteMessage(websocket.TextMessage, []byte(sound))
 				}
 
 				if err != nil {
-					opErr := &net.OpError{}
-					if errors.Is(err, websocket.ErrCloseSent) || errors.As(err, &opErr) {
-						break
-					}
-					fmt.Fprintf(os.Stderr, "[error] write: %v %T\n", err, err)
+					return
 				}
 			}
-			waitChan <- struct{}{}
 		}()
 		var buf bytes.Buffer
 		buf.WriteString("<div id=\"playable-sounds\" class=\"flex flex-1 flex-wrap justify-center items-center max-w-7xl md:sticky md:top-0 md:bg-white md:dark:bg-gray-900\">")
@@ -406,9 +402,10 @@ func main() {
 
 		mu.Lock()
 		clients[c] = soundChan
+		clientCount := len(clients)
 		mu.Unlock()
 
-		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", len(clients)))
+		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", clientCount))
 
 		for {
 			_, _, err := c.ReadMessage()
@@ -421,12 +418,13 @@ func main() {
 
 		mu.Lock()
 		delete(clients, c)
+		clientCount = len(clients)
 		mu.Unlock()
 
 		close(soundChan)
 		<-waitChan
 
-		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", len(clients)))
+		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", clientCount))
 	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
@@ -525,11 +523,11 @@ func main() {
 		buf.WriteString("<ul>")
 		soundsMu.RLock()
 		for _, sound := range sounds {
-			buf.WriteString(fmt.Sprintf("<li>%s (%s) <button onclick=\"new Audio('https://cdn.discordapp.com/soundboard-sounds/%s').play()\">Play</button><button hx-delete=\"/delete-sound?soundID=%s&guildID=%s\">Delete</button></li>", sound.Name, sound.ID, sound.ID, sound.ID, guildID))
+			buf.WriteString(fmt.Sprintf("<li>%s (%s) <button onclick=\"new Audio('https://cdn.discordapp.com/soundboard-sounds/%s').play()\">Play</button><button data-action=\"delete\" data-soundid=\"%s\" data-guildid=\"%s\">Delete</button></li>", sound.Name, sound.ID, sound.ID, sound.ID, guildID))
 		}
 		soundsMu.RUnlock()
 		for _, storedSound := range storedSounds {
-			buf.WriteString(fmt.Sprintf("<li>%s <button hx-post=\"/add-sound?soundLocation=%s&guildID=%s\">Add</button></li>", storedSound, storedSound, guildID))
+			buf.WriteString(fmt.Sprintf("<li class=\"add-sound-component\" data-soundname=\"%s\" data-soundext=\"%s\">%s <button data-action=\"add\">Add</button></li>", htmlEscape.EscapeString(strings.TrimSuffix(storedSound, path.Ext(storedSound))), path.Ext(storedSound), htmlEscape.EscapeString(storedSound)))
 		}
 		buf.WriteString("</ul>")
 		w.Write(buf.Bytes())

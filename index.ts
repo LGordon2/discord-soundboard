@@ -1,7 +1,8 @@
 import * as amplitude from '@amplitude/analytics-browser';
 import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
 import { enableDragDropTouch } from '@dragdroptouch/drag-drop-touch';
-import { isSwitching, switchSound } from './swap-feedback';
+import { isSwitching, switchSound, reconcileSwitches } from './swap-feedback';
+import { connectBoard } from './live-updates';
 
 const playTimeouts: Record<string, any> = {};
 (window as any)._addStats = {};
@@ -166,30 +167,6 @@ const dragEnd = () => {
     })
 }
 
-const makeDroppable = (el: any) => {
-    const target = el;
-    target.addEventListener('dragover', (event: any) => {
-        event.preventDefault();
-    })
-
-    target.addEventListener('drop', (event: any) => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const target = el as HTMLElement;
-        if (!dragged || isSwitching(target.id)) return;
-        const soundName = dragged.getAttribute('data-soundname');
-        const soundExtension = dragged.getAttribute('data-soundext');
-        if (soundName && soundExtension) {
-            void switchSound(target, soundName, soundExtension);
-        }
-    })
-}
-
-const makeDraggable = (el: any) => {
-    el.addEventListener('dragstart', dragStart);
-    el.addEventListener('dragend', dragEnd);
-}
-
 const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
     let disableFn = (el: any) => el.setAttribute('disabled', 'true');
     if (hasEmpty) {
@@ -206,11 +183,9 @@ const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
     });
 }
 
-(window as any)._makeDraggable = makeDraggable;
-(window as any)._makeDroppable = makeDroppable;
 // TODO this is pretty much the same as play sound
-(window as any)._highlightSound = (elId: any, soundId: string, soundName: string) => {
-    amplitude.track('soundboard: play sound', { soundName })
+(window as any)._highlightSound = (elId: any, soundId: string, _soundName: string) => {
+    amplitude.track('soundboard: play sound', { soundName: _soundName })
     const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
     let el = undefined;
     if (elId) {
@@ -228,8 +203,114 @@ const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
 (window as any)._iconLoad = iconLoad;
 (window as any)._addSoundUpdates = addSoundUpdates;
 
-// To polyfill the entire document:
+const hydrate = (root: Element) => {
+    root.querySelectorAll<HTMLElement>('[data-icon]').forEach(el => {
+        const icon = el.getAttribute('data-icon');
+        iconLoad(el, icon);
+        if (!el.hasAttribute('aria-label')) {
+            el.setAttribute('aria-label', ({ plus: 'Add sound', minus: 'Remove sound', save: 'Save sound',
+                play: 'Play in Discord', headphones: 'Preview sound' } as Record<string, string>)[icon || ''] || 'Sound control');
+        }
+    });
+};
+
+const showActionError = () => {
+    let status = document.getElementById('action-status');
+    if (!status) {
+        status = document.createElement('div');
+        status.id = 'action-status';
+        status.setAttribute('role', 'alert');
+        document.body.append(status);
+    }
+    status.textContent = 'The sound action failed. Check the board before trying again.';
+};
+
+document.addEventListener('click', async event => {
+    const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button[data-action]') : null;
+    if (!button || button.disabled || button.closest('[inert]')) return;
+    const card = button.closest<HTMLElement>('[data-soundid]');
+    if (card && isSwitching(card.id)) return;
+    const soundID = card?.getAttribute('data-soundid') || '';
+    const action = button.getAttribute('data-action');
+    if (action === 'preview') {
+        playSound(card?.id, soundID, false);
+        return;
+    }
+    const query = new URLSearchParams();
+    let endpoint: string;
+    let method = 'POST';
+    switch (action) {
+        case 'send':
+            endpoint = '/send-sound';
+            query.set('soundID', soundID);
+            (window as any)._highlightSound(card?.id, soundID, card?.getAttribute('data-soundname'));
+            break;
+        case 'save':
+            endpoint = '/save-sound';
+            query.set('soundID', soundID);
+            query.set('soundName', card?.getAttribute('data-soundname') || '');
+            break;
+        case 'delete':
+            endpoint = '/delete-sound';
+            method = 'DELETE';
+            query.set('soundID', button.getAttribute('data-soundid') || soundID);
+            query.set('guildID', button.getAttribute('data-guildid') || '');
+            break;
+        case 'add': {
+            endpoint = '/add-sound';
+            const stored = button.closest('.add-sound-component');
+            query.set('soundLocation', (stored?.getAttribute('data-soundname') || '') + (stored?.getAttribute('data-soundext') || ''));
+            break;
+        }
+        default: return;
+    }
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    try {
+        const response = await fetch(`${endpoint}?${query}`, { method });
+        if (!response.ok) throw new Error('Sound action failed');
+        document.getElementById('action-status')?.replaceChildren();
+    } catch {
+        showActionError();
+    } finally {
+        button.removeAttribute('aria-busy');
+        // Replaced buttons retain server permissions; only restore this
+        // request's original button and account for current library capacity.
+        button.disabled = false;
+        if (action === 'add') {
+            const config = document.getElementById('addsoundscript');
+            if (config?.getAttribute('data-has-empty') !== 'true') button.disabled = true;
+        }
+    }
+});
+
+document.addEventListener('dragstart', event => {
+    const card = event.target instanceof Element ? event.target.closest<HTMLElement>('.add-sound-component') : null;
+    if (card) dragStart({ target: card });
+});
+document.addEventListener('dragend', () => { dragEnd(); dragged = null; });
+document.addEventListener('dragover', event => {
+    if (event.target instanceof Element && event.target.closest('.droppable')) event.preventDefault();
+});
+document.addEventListener('drop', event => {
+    const card = event.target instanceof Element ? event.target.closest<HTMLElement>('.droppable') : null;
+    if (!card) return;
+    event.preventDefault();
+    if (!dragged || isSwitching(card.id)) return;
+    const name = dragged.getAttribute('data-soundname');
+    const extension = dragged.getAttribute('data-soundext');
+    if (name && extension) void switchSound(card, name, extension);
+});
+document.getElementById('mute-sounds-checkbox')?.addEventListener('change', muteSounds);
+document.getElementById('play-send-sounds-checkbox')?.addEventListener('change', playSendSounds);
+
 enableDragDropTouch();
+connectBoard({
+    hydrate,
+    library: addSoundUpdates,
+    played: soundID => playSound(null, soundID, true),
+    updated: reconcileSwitches,
+});
 
 (async () => {
     // Create and Install Session Replay Plugin

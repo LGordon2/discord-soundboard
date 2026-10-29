@@ -1,8 +1,8 @@
 package main
 
 import (
+	"html/template"
 	"strings"
-	"text/template"
 )
 
 var (
@@ -29,35 +29,35 @@ const uploadedByComponentTmplRaw = `
 `
 
 const addSoundCardComponentTmplRaw = `
-    <div draggable="true" hx-on="htmx:beforeProcessNode: window._makeDraggable(this)" data-soundname="{{ .soundNameEscaped }}" data-soundext="{{ .extension }}"
+    <div draggable="true" data-soundname="{{ .soundNameEscaped }}" data-soundext="{{ .extension }}"
         class="add-sound-component h-12 min-w-72 max-w-sm p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700 {{if .hidden}}hidden{{end}}">
         <div class="flex flex-row">
             <h5 class="flex-1 max-w-60 font-bold text-xl truncate text-gray-900 dark:text-white">{{ .soundName }}
             </h5>
-            <button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" hx-swap="none" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'plus')" hx-post="/add-sound?soundLocation={{ .soundNameEscaped }}{{ .extension }}&guildID={{ .guildID }}"></button>
+            <button class="flex shrink items-center justify-center disabled:text-gray-500 text-green-500" data-action="add" data-icon="plus"></button>
         </div>
     </div>
 `
 
 const soundCardComponentTmplRaw = `
-<div {{ if .canRemove }}hx-on="htmx:beforeProcessNode: window._makeDroppable(this)"{{end}} data-soundid="{{.soundId}}" id="soundboard-{{.ordinal}}"
+<div data-soundname="{{.soundName}}" data-soundid="{{.soundId}}" id="soundboard-{{.ordinal}}"
             class="h-24 w-72 p-2 m-2 bg-white border border-2 border-gray-200 rounded-lg shadow dark:bg-gray-800 dark:border-gray-700 grid grid-cols-1 divide-y divide-gray-700 {{ if .canRemove }}droppable{{ end }}">
             {{ if .used }}
             <div class="flex flex-row">
                 <h5 class="flex-1 mb-2 text-xl font-bold tracking-tight text-gray-900 dark:text-white truncate">{{.soundName}}
                 </h5>
                 <div class="shrink mb-2">
-                    <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'save')" class="enabled:text-blue-500 disabled:text-gray-500"
-                        hx-post="/save-sound?soundID={{.soundId}}&soundName={{.soundName}}" {{if not .canSave}}disabled="true"{{end}}>
+                    <button data-action="save" data-icon="save" class="enabled:text-blue-500 disabled:text-gray-500"
+                        {{if not .canSave}}disabled="true"{{end}}>
                     </button>
                 </div>
                 <a class="shrink text-blue-500 ml-1"
-                    href="https://cdn.discordapp.com/soundboard-sounds/{{.soundId}}" hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'download'); new Audio(this.href)"></a>
+                    href="https://cdn.discordapp.com/soundboard-sounds/{{.soundId}}" data-icon="download" aria-label="Download sound"></a>
             </div>
 
             <div class="flex flex-row divide-x divide-gray-700">
-                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'headphones')" hx-on:click="window._playSound('soundboard-{{.ordinal}}', '{{.soundId}}')" class="flex flex-1 items-center justify-center mt-1"></button>
-                <button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'play')" hx-post="/send-sound?soundID={{.soundId}}" hx-on:click="window._highlightSound('soundboard-{{.ordinal}}', '{{.soundId}}', '{{.soundName}}')" hx-swap="none" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500" {{if not .canSend}}disabled="true"{{end}}></button>
+                <button data-action="preview" data-icon="headphones" class="flex flex-1 items-center justify-center mt-1"></button>
+                <button data-action="send" data-icon="play" class="flex flex-1 items-center justify-center mt-1 enabled:text-green-500 disabled:text-gray-500" {{if not .canSend}}disabled="true"{{end}}></button>
                 {{ if .deleteButton }}
                 {{.deleteButton}}
                 {{ end }}
@@ -83,6 +83,9 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 		"canRemove":    canRemove || !used,
 		"used":         used,
 	}
+	if button, ok := deleteButton.(string); ok {
+		m["deleteButton"] = template.HTML(button) // Generated internally by deleteButton.
+	}
 	err := soundCardComponentTmpl.Execute(&builder, m)
 	if err != nil {
 		panic(err)
@@ -93,11 +96,11 @@ func soundCardComponent(i int, id, name string, canSend, canSave, canRemove bool
 func addSoundCardComponent(storedSound, extension, guildID string, hidden bool) string {
 	var builder strings.Builder
 	m := map[string]any{
-		"soundName": storedSound,
-		"soundNameEscaped": strings.ReplaceAll(storedSound, "\"", "&quot;"),
-		"extension": extension,
-		"guildID":   guildID,
-		"hidden":    hidden,
+		"soundName":        storedSound,
+		"soundNameEscaped": storedSound,
+		"extension":        extension,
+		"guildID":          guildID,
+		"hidden":           hidden,
 	}
 	err := addSoundCardComponentTmpl.Execute(&builder, m)
 	if err != nil {

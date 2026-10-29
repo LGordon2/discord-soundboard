@@ -17,3 +17,16 @@ Discord sound swapper. You can host sound files and page them in and out as need
 
  - `CLIENT_ID` app client ID. Referenced in code, but not really used in the app yet.
  - `CLIENT_SECRET` app client secret. Same as above.
+
+## Browser client
+
+The UI uses native `fetch` and `WebSocket` APIs with delegated button and drag
+handlers. HTMX is no longer required. The backend streams server-rendered HTML
+fragments identified by element ID; library state and playback notifications use
+data attributes rather than executable scripts. Only changed fragments are
+hydrated. Reconnects use capped exponential backoff.
+
+Build the frontend with `pnpm build` (Node 24 is available on the service host),
+and run `tsc --noEmit`, `go test ./...`, and `go vet ./...` for checks. Deploy
+frontend and backend together when changing the fragment protocol, and refresh
+existing browser tabs. The systemd service serves `dist` from this checkout.

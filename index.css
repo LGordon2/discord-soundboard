@@ -23,6 +23,8 @@
     cursor: progress;
 }
 .switch-spinner {
+    display: inline-block;
+    transform-origin: center;
     width: 1.1rem;
     height: 1.1rem;
     flex-shrink: 0;
@@ -46,6 +48,13 @@
 }
 #swap-status.swap-error { background: #991b1b; }
 @keyframes switch-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) {
-    .switch-spinner { animation: none; }
+
+#connection-status:not(:empty), #action-status:not(:empty) {
+    margin: 0.5rem auto;
+    padding: 0.5rem 1rem;
+    width: fit-content;
+    border-radius: 0.5rem;
+    background: #991b1b;
+    color: white;
 }
+button[aria-busy="true"] { opacity: 0.5; cursor: progress; }
