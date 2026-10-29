@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -30,6 +30,11 @@ func NewDiscordRestClient(token, tokenType string) *DiscordRestClient {
 	if err != nil {
 		panic(err)
 	}
+	transport := discord.Client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	discord.Client.Transport = discordTimingTransport{base: transport}
 	u, err := discord.User("@me")
 	if err != nil {
 		panic(err)
@@ -39,6 +44,21 @@ func NewDiscordRestClient(token, tokenType string) *DiscordRestClient {
 		discord: discord,
 		userID:  u.ID,
 	}
+}
+
+// Log individual HTTP attempts separately from the end-to-end method timers,
+// which also include DiscordGo's bucket waits and automatic retries.
+type discordTimingTransport struct{ base http.RoundTripper }
+
+func (t discordTimingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	start := time.Now()
+	resp, err := t.base.RoundTrip(req)
+	if resp != nil {
+		log.Printf("discord HTTP method=%s status=%d duration=%v remaining=%q reset_after=%q retry_after=%q bucket=%q", req.Method, resp.StatusCode, time.Since(start), resp.Header.Get("X-RateLimit-Remaining"), resp.Header.Get("X-RateLimit-Reset-After"), resp.Header.Get("Retry-After"), resp.Header.Get("X-RateLimit-Bucket"))
+	} else {
+		log.Printf("discord HTTP method=%s duration=%v failed=true", req.Method, time.Since(start))
+	}
+	return resp, err
 }
 
 func (c *DiscordRestClient) GetUserId() string {
@@ -64,10 +84,10 @@ func (c *DiscordRestClient) SendSoundboardSound(guildId, channelId, soundId stri
 
 func (c *DiscordRestClient) DeleteSoundboardSound(guildId, soundId string) error {
 	start := time.Now()
+	defer func() { fmt.Printf("DeleteSoundboardSound (including rate-limit waits): %v\n", time.Since(start)) }()
 	_, err := c.discord.Request(http.MethodDelete, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds/"+soundId, nil, func(cfg *discordgo.RequestConfig) {
 		cfg.Request.Header.Set("X-Super-Properties", superProperties)
 	})
-	fmt.Printf("DeleteSoundboardSound: %v\n", time.Since(start))
 	return err
 }
 
@@ -86,23 +106,28 @@ type CreateSoundboardSoundResponse struct {
 }
 
 func (c *DiscordRestClient) CreateSoundboardSound(guildId, name, mimeType string, data []byte) (CreateSoundboardSoundResponse, error) {
-	var soundBuf bytes.Buffer
-	soundBuf.WriteString("data:" + mimeType + ";base64,")
-	soundBuf.WriteString(base64.StdEncoding.EncodeToString(data))
-	request := CreateSoundboardSoundRequest{
+	return c.createSoundboardSound(guildId, prepareSoundboardSound(name, mimeType, data))
+}
+
+// Prepare uploads while loading the local library, rather than base64 encoding
+// the audio on every replacement after the old Discord sound has been deleted.
+func prepareSoundboardSound(name, mimeType string, data []byte) CreateSoundboardSoundRequest {
+	return CreateSoundboardSoundRequest{
 		Name:   name,
-		Sound:  soundBuf.String(),
+		Sound:  "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data),
 		Volume: 1,
 	}
+}
 
+func (c *DiscordRestClient) createSoundboardSound(guildId string, request CreateSoundboardSoundRequest) (CreateSoundboardSoundResponse, error) {
 	start := time.Now()
+	defer func() { fmt.Printf("CreateSoundboardSound (including rate-limit waits): %v\n", time.Since(start)) }()
 	resp, err := c.discord.Request(http.MethodPost, baseURL+"/api/v9/guilds/"+guildId+"/soundboard-sounds", request, func(cfg *discordgo.RequestConfig) {
 		cfg.Request.Header.Set("X-Super-Properties", superProperties)
 	})
 	if err != nil {
 		return CreateSoundboardSoundResponse{}, err
 	}
-	fmt.Printf("CreateSoundboardSound: %v\n", time.Since(start))
 
 	var soundboardResponse CreateSoundboardSoundResponse
 	err = json.Unmarshal(resp, &soundboardResponse)

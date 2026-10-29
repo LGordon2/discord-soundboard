@@ -99,7 +99,7 @@ func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) s
 	return fmt.Sprintf(`<button hx-on="htmx:beforeProcessNode: window._iconLoad(this, 'minus')" class="flex flex-1 peer items-center justify-center mt-1 %s" hx-delete="/delete-sound?soundID=%s&guildID=%s" %s></button>%s`, textColor, soundId, guildId, disabledProp, hiddenTooltip)
 }
 
-func fetchStoredSounds() ([]string, map[string][]byte, error) {
+func fetchStoredSounds() ([]string, storedSoundMap, error) {
 	files, err := os.ReadDir(soundsDir)
 	if err != nil {
 		panic(err)
@@ -107,7 +107,7 @@ func fetchStoredSounds() ([]string, map[string][]byte, error) {
 	sort.Slice(files, func(i, j int) bool { return strings.ToLower(files[i].Name()) < strings.ToLower(files[j].Name()) })
 
 	storedSounds := []string{}
-	storedSoundMap := make(map[string][]byte) // these won't contain the extension
+	cachedSounds := make(storedSoundMap)
 	for _, f := range files {
 		ext := path.Ext(f.Name())
 		if ext != ".ogg" && ext != ".mp3" {
@@ -116,14 +116,17 @@ func fetchStoredSounds() ([]string, map[string][]byte, error) {
 		nameWithoutExt := strings.TrimSuffix(f.Name(), ext)
 		storedSounds = append(storedSounds, f.Name())
 		data, err := os.ReadFile(path.Join(soundsDir, f.Name()))
-		if err == nil {
-			storedSoundMap[nameWithoutExt] = data
+		if err == nil && len(data) > 0 {
+			mimeType := "audio/ogg"
+			if ext == ".mp3" {
+				mimeType = "audio/mpeg"
+			}
+			cachedSounds[f.Name()] = prepareSoundboardSound(nameWithoutExt, mimeType, data)
 		} else {
-			storedSoundMap[nameWithoutExt] = []byte{}
 			fmt.Printf("[warn] couldn't prefetch file %s\n", f.Name())
 		}
 	}
-	return storedSounds, storedSoundMap, nil
+	return storedSounds, cachedSounds, nil
 }
 
 type SoundboardSoundWithOrdinal struct {
@@ -164,7 +167,7 @@ func main() {
 				buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, true, nil))
 			}
 			disabled := sound.UserID != discordClient.userID
-			_, cannotSave := storedSoundMap[sound.Name]
+			cannotSave := storedSoundMap.containsName(sound.Name)
 			userInfo := userInfoCache[sound.UserID]
 			avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
 			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
@@ -275,10 +278,15 @@ func main() {
 			return err
 		}
 
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("downloading sound: HTTP %d", resp.StatusCode)
+		}
+
 		contentType := resp.Header.Get("Content-Type")
 		var extension string
 		switch contentType {
-		case "audio/mpeg3":
+		case "audio/mpeg", "audio/mp3", "audio/mpeg3":
 			extension = "mp3"
 		default:
 			extension = "ogg"
@@ -471,43 +479,16 @@ func main() {
 		http.FileServer(http.Dir("./dist")).ServeHTTP(w, r)
 	})
 	http.HandleFunc("/swap-sound", func(w http.ResponseWriter, r *http.Request) {
-		input := struct {
-			Add    addSoundInput    `json:"add"`
-			Delete deleteSoundInput `json:"delete"`
-		}{}
-
-		err := json.NewDecoder(r.Body).Decode(&input)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(os.Stderr, "[error] decoding: %v\n", err)
-			fmt.Fprintf(w, "%v", err)
+		start := time.Now()
+		defer func() { log.Printf("swap-sound total: %v", time.Since(start)) }()
+		input := swapSoundInput{}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		if input.Delete != (deleteSoundInput{}) {
-			err = deleteSound(discordClient, guildID, input.Delete)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(os.Stderr, "[error] deleting during swap: %v\n", err)
-				fmt.Fprintf(w, "[error] deleting during swap: %v", err)
-				return
-			}
-		}
-
-		if input.Add != (addSoundInput{}) {
-			err = addSound(discordClient, storedSoundMap, input.Add)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(os.Stderr, "[error] deleting during swap: %v\n", err)
-				fmt.Fprintf(w, "[error] deleting during swap: %v", err)
-				return
-			}
-		}
-
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(os.Stderr, "[error] adding during swap: %v\n", err)
-			fmt.Fprintf(w, "[error] adding during swap: %v", err)
+		if err := swapSound(discordClient, storedSoundMap, input); err != nil {
+			log.Printf("[error] swapping sound: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -798,7 +779,7 @@ func main() {
 						})
 					} else {
 						// if we detect a new sound that we don't have try to save it.
-						if _, ok := storedSoundMap[newSound.Name]; !ok {
+						if !storedSoundMap.containsName(newSound.Name) {
 							fmt.Printf("attempting to save new sound %v\n", newSound.Name)
 							saveSoundFunc(newSound.ID, newSound.Name)
 						}
