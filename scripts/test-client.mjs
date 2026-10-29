@@ -126,9 +126,11 @@ assert.equal(document.querySelector('[data-favorite]').getAttribute('aria-presse
 assert.equal(document.querySelector('[data-soundname="Funny"]').hidden,true);
 await click('[data-library-filter="all"]');
 const search=document.getElementById('library-search');
+const existingDescription=document.querySelector('[data-soundname="Funny"] .sound-description');
 search.value='CARTON';
 search.dispatchEvent(new window.Event('input'));
 assert.equal(document.querySelector('[data-soundname="Funny"]').hidden,false);
+assert.equal(document.querySelector('[data-soundname="Funny"] .sound-description'),existingDescription,'search should not recreate metadata elements');
 assert.equal(document.querySelector('#storedsounds [data-soundname="Next & Name"]').hidden,true);
 search.value='nothing matches this';
 search.dispatchEvent(new window.Event('input'));
@@ -178,4 +180,6 @@ assert.doesNotMatch(css,/--tw-|tailwind/i);
 assert.doesNotMatch(html,/dark:|grid-cols-|flex-row|bg-gray-/);
 assert.match(css,/\[hidden\][^{]*\{display:none!important\}/);
 assert.match(css,/prefers-color-scheme:dark/);
+assert.match(css,/min-width:1024px[^}]+#playable-sounds\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+assert.match(css,/min-width:640px[^}]+#playable-sounds\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 console.log('PASS: production controls and analytics; opt-in preview, search, favorites, recent filter, disabling preview, capacity permissions, description subtext, fuzzy search, aligned SVG icons, and plain minified CSS');

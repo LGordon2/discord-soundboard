@@ -85,7 +85,8 @@ six characters, and two for longer words. Short words use literal matching.
 Styles live in `index.css` under component classes; Tailwind is not required at
 build time or in the browser. Vite emits minified CSS/JavaScript, and the build
 also minifies `index.html`. The backend minifies live card/library HTML fragments.
-Dark mode follows the system preference.
+Dark mode follows the system preference. The uploaded board uses four columns
+on desktop (eight slots across two rows), two on tablets, and one on phones.
 
 `pnpm test` builds production assets and runs DOM and search regressions. Node 24
 is recommended. For staged assets run `CLIENT_DIST=/path/to/dist pnpm test:client`.

@@ -24,6 +24,7 @@ let enabled = false;
 
 const updateFavorite = (button: HTMLButtonElement, filename: string) => {
     const selected = favorites.has(filename);
+    if (button.getAttribute('aria-pressed') === String(selected)) return;
     button.textContent = selected ? '★' : '☆';
     button.setAttribute('aria-pressed', String(selected));
     button.setAttribute('aria-label', `${selected ? 'Remove from' : 'Add to'} favorites: ${filename}`);

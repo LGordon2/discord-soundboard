@@ -2,6 +2,7 @@ type SoundMetadata = { description: string; emoji_id?: string; emoji_name?: stri
 let metadata: Record<string, SoundMetadata> = {};
 let onUpdate = () => {};
 let requestVersion = 0;
+const decoratedCards = new WeakMap<HTMLElement, { enabled: boolean; name: string; entry: SoundMetadata | undefined }>();
 
 export const getSoundMetadata = (name: string): SoundMetadata | undefined => metadata[name];
 
@@ -40,6 +41,9 @@ export const decorateSoundMetadata = (root: ParentNode) => {
         const name = card.getAttribute('data-soundname') || '';
         if (!name) continue;
         const entry = metadata[name];
+        const previous = decoratedCards.get(card);
+        if (previous?.enabled === enabled && previous.name === name && previous.entry === entry) continue;
+        decoratedCards.set(card, { enabled, name, entry });
         // Rebuild only metadata decorations; leave controls and their state intact.
         card.querySelectorAll('.sound-emoji, .sound-description, [data-edit-description]').forEach(node => node.remove());
         if (!enabled) { card.removeAttribute('title'); continue; }
