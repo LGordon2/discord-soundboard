@@ -58,3 +58,7 @@ Validation on this ARM64 host: `go test ./...` and `go vet ./...` passed.
 The 256 KiB benchmark measured 2.71 ms and 1,056,770 allocated bytes for
 encoding per switch versus 134 ns and zero allocations for cached lookup.
 This is a small local saving, not an explanation for multi-second Discord delays.
+
+The race-enabled test binary compiled but could not execute on this host:
+ThreadSanitizer reports `unsupported VMA range` (`Found 39 - Supported 48`).
+Race validation therefore remains unavailable on this ARM64 configuration.
