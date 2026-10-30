@@ -10,6 +10,7 @@ const clearSelection = (restoreFocus = false) => {
     selected = null;
     document.getElementById('mobile-slot-picker')?.setAttribute('hidden', '');
     document.querySelectorAll('.slot-pick').forEach(button => button.remove());
+    document.querySelectorAll('#playable-sounds .slot-unavailable').forEach(card => card.classList.remove('slot-unavailable'));
     if (restoreFocus && source?.isConnected) source.querySelector<HTMLButtonElement>('[data-choose-slot]')?.focus({preventScroll: true});
 };
 
@@ -42,6 +43,7 @@ export const refreshMobilePreview = () => {
     let available = 0;
     for (const card of uploaded) {
         const allowed = card.classList.contains('droppable') && !isSwitching(card.id);
+        card.classList.toggle('slot-unavailable', !allowed);
         let button = card.querySelector<HTMLButtonElement>('.slot-pick');
         if (!allowed) { button?.remove(); continue; }
         available++;

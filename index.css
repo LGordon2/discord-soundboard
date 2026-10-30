@@ -328,3 +328,6 @@ html.ui-preview #library-tools[hidden] { display: block !important; }
     .choose-slot:focus-visible, .slot-pick:focus-visible, #cancel-slot-picker:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
     .mobile-preview #playable-sounds { position: static; }
 }
+
+/* During slot selection, show only targets the viewer can currently use. */
+#playable-sounds .slot-unavailable { display: none !important; }
