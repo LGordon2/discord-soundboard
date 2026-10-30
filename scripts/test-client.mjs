@@ -54,7 +54,7 @@ globalThis.fetch=async(url,options)=>{
 };
 const bundle=html.match(/src="\/assets\/([^\"]+\.js)"/)[1];
 await import(pathToFileURL(join(dist, 'assets', bundle)).href);
-assert.equal(socket.url,'wss://discord-soundboard.lewgordon.com/ws');
+assert.equal(socket.url,'wss://discord-soundboard.lewgordon.com/ws?format=json');
 assert.ok(document.getElementById('initial-card-layout'),'keep initial sizing until board data arrives');
 assert.equal(document.querySelectorAll('#playable-sounds .card-placeholder').length,8);
 assert.equal(document.getElementById('storedsounds').getAttribute('aria-busy'),'true');
@@ -277,3 +277,37 @@ assert.match(css,/prefers-color-scheme:dark/);
 assert.match(css,/min-width:1024px[^}]+#playable-sounds,#storedsounds\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
 assert.match(css,/min-width:640px[^}]+#playable-sounds,#storedsounds\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 console.log('PASS: production controls and analytics; opt-in preview, search, favorites, recent filter, disabling preview, capacity permissions, description subtext, fuzzy search, aligned SVG icons, and plain minified CSS');
+
+// Exercise the negotiated JSON protocol through the production socket handler.
+const wire = event => socket.onmessage({data:JSON.stringify(event)+'\n'});
+wire({type:'board',slots:[{slot:3,id:'json-id',name:'<img src=x onerror=alert(1)>',canSend:false,canSave:true,canRemove:false,username:'Other <user>',guild:'456',avatar:'javascript:alert(1)'}],hidden:['Live'],hasEmpty:true});
+const jsonCard=document.getElementById('soundboard-3');
+// The old fixture has only three slots; add a placeholder and replay.
+if(!jsonCard) {const el=document.createElement('div');el.id='soundboard-3';document.getElementById('playable-sounds').append(el);wire({type:'board',slots:[{slot:3,id:'json-id',name:'<img src=x onerror=alert(1)>',canSend:false,canSave:true,canRemove:false,username:'Other <user>',guild:'456',avatar:'javascript:alert(1)'}],hidden:['Live'],hasEmpty:true});}
+const rendered=document.getElementById('soundboard-3');
+assert.equal(rendered.querySelector('.sound-title').textContent,'<img src=x onerror=alert(1)>');
+assert.equal(rendered.querySelectorAll('[onerror]').length,0);
+assert.equal(rendered.querySelector('[data-action="send"]').disabled,true);
+assert.equal(rendered.querySelector('[data-action="delete"]').disabled,true);
+assert.equal(rendered.querySelector('[data-action="save"]').disabled,false);
+assert.equal(rendered.classList.contains('droppable'),false);
+assert.equal(rendered.querySelector('.uploader-name').textContent,'Other <user>');
+wire({type:'viewers',count:7});
+assert.equal(document.getElementById('user-count').textContent,'7');
+wire({type:'switches',switches:{epoch:'json-server',version:1,pending:[{slot:3,name:'Incoming'}]}});
+assert.equal(rendered.getAttribute('aria-busy'),'true');
+socket.onmessage({data:JSON.stringify({type:'board',slots:[{slot:3,id:'new-json-id',name:'Incoming',canRemove:true}],hasEmpty:true})+'\n'+JSON.stringify({type:'switches',switches:{epoch:'json-server',version:2,pending:[]}})+'\n'});
+assert.equal(document.getElementById('soundboard-3').getAttribute('data-soundid'),'new-json-id');
+assert.equal(document.getElementById('soundboard-3').hasAttribute('aria-busy'),false);
+console.log('PASS: JSON slot events, permissions, escaping, viewer counts, and atomic shared loading completion');
+wire({type:'board',slots:[],hidden:['Already uploaded'],hasEmpty:true,library:[{name:'JSON & library <sound>',ext:'.ogg'},{name:'Already uploaded',ext:'.mp3'}]});
+const jsonLibrary=document.getElementById('storedsounds');
+assert.equal(jsonLibrary.querySelectorAll('.add-sound-component').length,2);
+assert.equal(jsonLibrary.querySelector('.library-title').textContent,'JSON & library <sound>');
+assert.equal(jsonLibrary.querySelector('[data-soundname="Already uploaded"]').classList.contains('hidden'),true);
+assert.equal(jsonLibrary.querySelector('[data-action="add"]').disabled,false);
+const beforeJSONMetadata=metadataCalls.length;
+wire({type:'metadata'});
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.ok(metadataCalls.length>beforeJSONMetadata);
+console.log('PASS: JSON library snapshot, availability, and metadata invalidation');

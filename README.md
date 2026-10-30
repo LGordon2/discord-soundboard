@@ -122,3 +122,12 @@ Slots and sounds already being uploaded are reserved against conflicting request
 The shared indicator clears with the confirmed Discord card update, on failure,
 or after the existing 20-second confirmation timeout. Pending state is in memory
 and resets on service restart; sound data and analytics remain in SQLite.
+
+New browsers connect to `/ws?format=json` and receive newline-delimited JSON
+board, loading-state, playback, metadata-invalidation, and viewer-count events.
+Snapshots include the library; ordinary board updates include only changed slots
+and current library availability. Local JavaScript templates escape server data
+and hydrate only replaced cards. Related events share one message so confirmation
+and loading completion apply together. WebSocket compression remains enabled.
+Connections to `/ws` without the format parameter retain HTML fragments for cached
+clients during deployment; the JSON path does not generate server-side card HTML.

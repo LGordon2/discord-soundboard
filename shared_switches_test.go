@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/gorilla/websocket"
-	"html"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,11 +15,14 @@ import (
 
 func decodeSharedState(t *testing.T, frame []byte) SharedSwitchSnapshot {
 	t.Helper()
-	value := strings.TrimSuffix(strings.TrimPrefix(string(frame), `<div id="switchstate" data-value="`), `"></div>`)
-	var snapshot SharedSwitchSnapshot
-	if err := json.Unmarshal([]byte(html.UnescapeString(value)), &snapshot); err != nil {
+	var event liveEvent
+	if err := json.Unmarshal(frame, &event); err != nil {
 		t.Fatal(err)
 	}
+	if event.Switches == nil {
+		t.Fatal("missing switch state")
+	}
+	snapshot := *event.Switches
 	return snapshot
 }
 

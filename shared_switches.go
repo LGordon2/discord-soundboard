@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"html"
 	"log"
 	"net/http"
 	"path"
@@ -50,8 +49,7 @@ func (s *SharedSwitches) snapshotLocked() SharedSwitchSnapshot {
 	return snapshot
 }
 func switchStateFrame(snapshot SharedSwitchSnapshot) []byte {
-	data, _ := json.Marshal(snapshot)
-	return []byte(`<div id="switchstate" data-value="` + html.EscapeString(string(data)) + `"></div>`)
+	return liveFrame(liveEvent{Type: "switches", Switches: &snapshot})
 }
 func (s *SharedSwitches) Frame() []byte {
 	s.mu.Lock()

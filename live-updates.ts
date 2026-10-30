@@ -1,3 +1,5 @@
+import { renderLiveEvents } from './live-render';
+
 export type UpdateHooks = {
     hydrate: (root: Element) => void;
     library: (hidden: string[], hasEmpty: boolean) => void;
@@ -11,7 +13,7 @@ export type UpdateHooks = {
 // updating library controls, so a library replacement cannot undo their state.
 export const applyBoardUpdate = (html: string, hooks: UpdateHooks) => {
     const template = document.createElement('template');
-    template.innerHTML = html;
+    template.innerHTML = renderLiveEvents(html);
     const roots: Element[] = [];
     let libraryChanged = false;
     let played: string | null = null;
@@ -65,6 +67,7 @@ export const connectBoard = (hooks: UpdateHooks) => {
         if (stopped) return;
         status.textContent = 'Connecting to soundboard…';
         const url = new URL('/ws', window.location.href);
+        url.searchParams.set('format', 'json');
         url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
         const connection = new WebSocket(url);
         socket = connection;

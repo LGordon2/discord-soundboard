@@ -235,7 +235,7 @@ func main() {
 
 	msgUpdates := make(chan []byte, 100)
 	sharedSwitches := newSharedSwitches(20*time.Second, func(frame []byte) { msgUpdates <- frame })
-	publishMetadata := func() { msgUpdates <- []byte(`<div id="soundmetadata" data-refresh="true"></div>`) }
+	publishMetadata := func() { msgUpdates <- liveFrame(liveEvent{Type: "metadata"}) }
 	http.Handle("/sound-metadata", soundMetadataHandler(metadata, func(name string) bool {
 		if name == "" {
 			return false
@@ -261,77 +261,47 @@ func main() {
 
 	soundUpdates := make(chan []SoundboardSoundWithOrdinal, 100)
 	clients := make(map[*websocket.Conn]chan []byte)
+	boardEvent := func(newSounds []SoundboardSoundWithOrdinal, wholeBoard bool) liveEvent {
+		event := liveEvent{Type: "board", Full: wholeBoard}
+		for _, sound := range newSounds {
+			slot := liveSlot{Slot: sound.ordinal, ID: sound.ID, Name: sound.Name, CanRemove: true}
+			if sound.ID != "" {
+				user := userInfoCache[sound.UserID]
+				slot.CanSend = userIsInChannel.Load()
+				slot.CanSave = !storedSoundMap.containsName(sound.Name)
+				slot.CanRemove = sound.UserID == discordClient.userID
+				slot.Username = user.Username
+				slot.Avatar = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, user.Avatar)
+				slot.Guild = guildID
+			}
+			event.Slots = append(event.Slots, slot)
+		}
+		soundsMu.RLock()
+		for _, sound := range sounds {
+			if sound == (SoundboardSound{}) {
+				event.HasEmpty = true
+			} else {
+				event.Hidden = append(event.Hidden, sound.Name)
+			}
+		}
+		soundsMu.RUnlock()
+		return event
+	}
 	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal, wholeBoard bool) bytes.Buffer {
 		var buf bytes.Buffer
-		if wholeBoard {
-			buf.WriteString(`<div id="playable-sounds" role="region" aria-label="Uploaded soundboard">`)
-		}
-		// write updates for new sounds
-		for _, sound := range newSounds {
-			if sound.SoundboardSound == (SoundboardSound{}) {
-				buf.WriteString(soundCardComponent(sound.ordinal, "", "", userIsInChannel.Load(), false, true, nil))
-				continue
-			}
-			disabled := sound.UserID != discordClient.userID
-			cannotSave := storedSoundMap.containsName(sound.Name)
-			userInfo := userInfoCache[sound.UserID]
-			avatarCDN := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, userInfo.Avatar)
-			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
-		}
-
-		if wholeBoard {
-			buf.WriteString("</div>")
-		}
-		hasEmpty := false
-		hiddenSounds := make([]string, 0)
-		// This is used later to prune sounds that can be added or disables adding new sounds.
-		soundsMu.RLock()
-		for _, sound := range sounds {
-			if sound == (SoundboardSound{}) {
-				hasEmpty = true
-				continue
-			}
-
-			encodedName, _ := json.Marshal(sound.Name)
-			hiddenSounds = append(hiddenSounds, string(encodedName))
-		}
-		soundsMu.RUnlock()
-		hiddenSoundString := "[" + strings.Join(hiddenSounds, ",") + "]"
-		buf.WriteString(fmt.Sprintf(`<div id="addsoundscript" data-hidden-sounds="%s" data-has-empty="%t"></div>`, htmlEscape.EscapeString(hiddenSoundString), hasEmpty))
-
-		var minifiedBuf bytes.Buffer
-		m.Minify("text/html", &minifiedBuf, &buf)
-		return minifiedBuf
+		buf.Write(liveFrame(boardEvent(newSounds, wholeBoard)))
+		return buf
 	}
 	updateStoredSounds := func(soundsWithOrdinal []SoundboardSoundWithOrdinal) *bytes.Buffer {
-		var buf bytes.Buffer = latestSoundUpdate(soundsWithOrdinal, true)
-		soundMap := make(map[string]bool)
-		hasEmpty := false
-		// This is used later to prune sounds that can be added or disables adding new sounds.
-		soundsMu.RLock()
-		for _, sound := range sounds {
-			if sound == (SoundboardSound{}) {
-				hasEmpty = true
-				continue
-			}
-			soundMap[sound.Name] = true
+		event := boardEvent(soundsWithOrdinal, true)
+		files := make([]liveFile, 0, len(storedSounds))
+		for _, file := range storedSounds {
+			ext := filepath.Ext(file)
+			files = append(files, liveFile{Name: strings.TrimSuffix(file, ext), Ext: ext})
 		}
-		soundsMu.RUnlock()
-		_ = hasEmpty
-
-		buf.WriteString("<div id=\"storedsounds\" role=\"region\" aria-label=\"Sound library\">")
-		for _, storedSound := range storedSounds {
-			ext := filepath.Ext(storedSound)
-			storedSoundNoExt := strings.TrimSuffix(storedSound, ext)
-			// hide sounds already present on the sound map
-			_, ok := soundMap[storedSoundNoExt]
-			buf.WriteString(addSoundCardComponent(storedSoundNoExt, ext, guildID, ok))
-		}
-		buf.WriteString("</div>")
-		if compact, err := m.Bytes("text/html", buf.Bytes()); err == nil {
-			buf.Reset()
-			buf.Write(compact)
-		}
+		event.Library = &files
+		var buf bytes.Buffer
+		buf.Write(liveFrame(event))
 		return &buf
 	}
 
@@ -371,7 +341,7 @@ func main() {
 			return
 		}
 
-		playSoundPayload := []byte("<div id=\"playsound\" data-play-sound=\"" + htmlEscape.EscapeString(soundID) + "\"></div>")
+		playSoundPayload := liveFrame(liveEvent{Type: "played", SoundID: soundID})
 		mu.RLock()
 		for _, clientChan := range clients {
 			select {
@@ -469,6 +439,7 @@ func main() {
 		}
 		defer c.Close()
 		c.SetCompressionLevel(flate.BestSpeed)
+		jsonProtocol := r.URL.Query().Get("format") == "json"
 		soundChan := make(chan []byte, 100)
 		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
 		soundsMu.RLock()
@@ -498,7 +469,11 @@ func main() {
 						return
 					}
 					c.SetWriteDeadline(time.Now().Add(10 * time.Second))
-					err = c.WriteMessage(websocket.TextMessage, []byte(sound))
+					payload := sound
+					if !jsonProtocol {
+						payload = legacyLiveFrame(sound)
+					}
+					err = c.WriteMessage(websocket.TextMessage, payload)
 				}
 
 				if err != nil {
@@ -522,7 +497,7 @@ func main() {
 			soundChan <- current
 		}
 
-		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", clientCount))
+		msgUpdates <- liveFrame(liveEvent{Type: "viewers", Count: clientCount})
 
 		for {
 			_, _, err := c.ReadMessage()
@@ -541,7 +516,7 @@ func main() {
 		close(soundChan)
 		<-waitChan
 
-		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", clientCount))
+		msgUpdates <- liveFrame(liveEvent{Type: "viewers", Count: clientCount})
 	})
 	staticFiles := staticHandler("./dist", func() [soundboardSoundCount]bool {
 		soundsMu.RLock()
