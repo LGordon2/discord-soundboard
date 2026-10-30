@@ -114,3 +114,11 @@ muted or when “Play send sounds” is off.
 Clicking **+** and dropping a library sound use the same pending state: a spinner
 on the source add button and target slot until Discord confirms the new sound.
 Pending sounds/slots cannot be submitted twice; failures restore the controls.
+
+Pending uploads are shared over the WebSocket: other viewers see the target
+slot's loading indicator, including when joining midway through an upload. Popup
+messages and recent-history updates remain local to the initiating browser.
+Slots and sounds already being uploaded are reserved against conflicting requests.
+The shared indicator clears with the confirmed Discord card update, on failure,
+or after the existing 20-second confirmation timeout. Pending state is in memory
+and resets on service restart; sound data and analytics remain in SQLite.

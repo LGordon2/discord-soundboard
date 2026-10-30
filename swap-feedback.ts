@@ -9,6 +9,9 @@ type PendingSwap = {
 };
 
 const pendingSwaps = new Map<string, PendingSwap>();
+const sharedSwaps = new Map<string, string>();
+let sharedEpoch = '';
+let sharedVersion = -1;
 let announcementTimer: ReturnType<typeof setTimeout> | undefined;
 
 const announce = (message: string, error = false, dismissAfter = 0) => {
@@ -65,6 +68,8 @@ const finish = (id: string) => {
     if (pending?.timer) clearTimeout(pending.timer);
     pendingSwaps.delete(id);
     clearCard(id);
+    const shared = sharedSwaps.get(id);
+    if (shared) drawSwitch(id, shared);
     document.dispatchEvent(new Event('soundboard:switch-state'));
 };
 
@@ -84,30 +89,66 @@ export const reconcileSwitches = () => {
             announce(`${pending.name} is ready.`, false, 3500);
             continue;
         }
-        if (card.querySelector('.switch-overlay')) continue;
-        card.classList.add('sound-switching');
-        card.setAttribute('aria-busy', 'true');
-        for (const child of Array.from(card.children)) {
-            if (child instanceof HTMLElement && !child.inert) {
-                child.inert = true;
-                child.setAttribute('data-switch-inert', '');
-            }
-        }
-        const overlay = document.createElement('div');
-        overlay.className = 'switch-overlay';
-        const label = document.createElement('span');
-        label.textContent = `Switching to ${pending.name}…`;
-        const spinner = document.createElement('span');
-        spinner.className = 'switch-spinner';
-        spinner.setAttribute('aria-hidden', 'true');
-        overlay.append(spinner, label);
-        card.append(overlay);
+        drawSwitch(id, pending.name);
     }
+    for (const [id, name] of sharedSwaps) if (!pendingSwaps.has(id)) drawSwitch(id, name);
 };
 
-export const isSwitching = (id: string) => pendingSwaps.has(id);
+const drawSwitch = (id: string, name: string) => {
+    const card = document.getElementById(id);
+    if (!card) return;
+    const existing = card.querySelector('.switch-overlay');
+    if (existing) {
+        const label = existing.querySelector('.switch-label');
+        if (label) label.textContent = `Switching to ${name}…`;
+        return;
+    }
+    card.classList.add('sound-switching');
+    card.setAttribute('aria-busy', 'true');
+    for (const child of Array.from(card.children)) {
+        if (child instanceof HTMLElement && !child.inert) {
+            child.inert = true;
+            child.setAttribute('data-switch-inert', '');
+        }
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'switch-overlay';
+    const label = document.createElement('span');
+    label.className = 'switch-label';
+    label.textContent = `Switching to ${name}…`;
+    const spinner = document.createElement('span');
+    spinner.className = 'switch-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    overlay.append(spinner, label);
+    card.append(overlay);
+};
+
+export const applySharedSwitches = (value: unknown) => {
+    if (!value || typeof value !== 'object') return;
+    const snapshot = value as { epoch?: unknown; version?: unknown; pending?: unknown };
+    if (typeof snapshot.epoch !== 'string' || typeof snapshot.version !== 'number' ||
+        !Number.isSafeInteger(snapshot.version) || snapshot.version < 0 || !Array.isArray(snapshot.pending)) return;
+    if (snapshot.epoch === sharedEpoch && snapshot.version <= sharedVersion) return;
+    const next = new Map<string, string>();
+    for (const item of snapshot.pending) {
+        if (!item || typeof item !== 'object' || !Number.isInteger(item.slot) || item.slot < 0 || item.slot >= 8 ||
+            typeof item.name !== 'string' || item.name.length === 0) return;
+        next.set(`soundboard-${item.slot}`, item.name);
+    }
+    sharedEpoch = snapshot.epoch;
+    sharedVersion = snapshot.version;
+    const previous = [...sharedSwaps.keys()];
+    sharedSwaps.clear();
+    for (const [id, name] of next) sharedSwaps.set(id, name);
+    for (const id of previous) if (!sharedSwaps.has(id) && !pendingSwaps.has(id)) clearCard(id);
+    reconcileSwitches();
+    document.dispatchEvent(new Event('soundboard:switch-state'));
+};
+
+export const isSwitching = (id: string) => pendingSwaps.has(id) || sharedSwaps.has(id);
 export const isSoundSwitching = (name: string) => {
     for (const pending of pendingSwaps.values()) if (pending.name === name) return true;
+    for (const shared of sharedSwaps.values()) if (shared === name) return true;
     return false;
 };
 
@@ -127,6 +168,7 @@ export const switchSound = async (card: HTMLElement, name: string, extension: st
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
                 add: { soundLocation: name + extension },
+                slot: Number(id.replace('soundboard-', '')),
                 ...(oldSoundID ? { delete: { soundID: oldSoundID } } : {}),
             }),
         });

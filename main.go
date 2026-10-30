@@ -234,6 +234,7 @@ func main() {
 	http.Handle("/analytics/play", analyticsRoutes)
 
 	msgUpdates := make(chan []byte, 100)
+	sharedSwitches := newSharedSwitches(20*time.Second, func(frame []byte) { msgUpdates <- frame })
 	publishMetadata := func() { msgUpdates <- []byte(`<div id="soundmetadata" data-refresh="true"></div>`) }
 	http.Handle("/sound-metadata", soundMetadataHandler(metadata, func(name string) bool {
 		if name == "" {
@@ -337,6 +338,8 @@ func main() {
 	go func() {
 		for newSounds := range soundUpdates {
 			buf := latestSoundUpdate(newSounds, false)
+			sharedSwitches.Resolve(newSounds)
+			buf.Write(sharedSwitches.Frame())
 			msgUpdates <- buf.Bytes()
 		}
 	}()
@@ -505,12 +508,19 @@ func main() {
 		}()
 		// One complete snapshot preserves the reserved layout and avoids an
 		// intermediate empty board or per-card replacement work on connection.
-		soundChan <- updateStoredSounds(soundsWithOrdinal).Bytes()
+		initial := updateStoredSounds(soundsWithOrdinal)
+		initialSwitches := sharedSwitches.Frame()
+		initial.Write(initialSwitches)
+		soundChan <- initial.Bytes()
 
 		mu.Lock()
 		clients[c] = soundChan
 		clientCount := len(clients)
 		mu.Unlock()
+		// Repair any switch-state change between the initial snapshot and registration.
+		if current := sharedSwitches.Frame(); !bytes.Equal(current, initialSwitches) {
+			soundChan <- current
+		}
 
 		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", clientCount))
 
@@ -594,22 +604,25 @@ func main() {
 
 		staticFiles.ServeHTTP(w, r)
 	})
-	http.HandleFunc("/swap-sound", func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		defer func() { log.Printf("swap-sound total: %v", time.Since(start)) }()
-		input := swapSoundInput{}
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err := swapSound(discordClient, storedSoundMap, input); err != nil {
-			log.Printf("[error] swapping sound: %v", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-	})
+	trackedSwaps := &trackedSwapHandler{
+		state: sharedSwitches,
+		board: func() [soundboardSoundCount]SoundboardSound {
+			soundsMu.RLock()
+			defer soundsMu.RUnlock()
+			return sounds
+		},
+		execute: func(input swapSoundInput) (CreateSoundboardSoundResponse, error) {
+			return swapSoundResult(discordClient, storedSoundMap, input)
+		},
+		refresh: func(current [soundboardSoundCount]SoundboardSound) {
+			updates := make([]SoundboardSoundWithOrdinal, 0, len(current))
+			for i, sound := range current {
+				updates = append(updates, SoundboardSoundWithOrdinal{SoundboardSound: sound, ordinal: i})
+			}
+			soundUpdates <- updates
+		},
+	}
+	http.Handle("/swap-sound", trackedSwaps)
 	http.Handle("/delete-sound", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := deleteSound(discordClient, r.URL.Query().Get("guildID"), deleteSoundInput{
 			SoundID: r.URL.Query().Get("soundID"),
@@ -623,18 +636,12 @@ func main() {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	http.HandleFunc("/add-sound", func(w http.ResponseWriter, r *http.Request) {
-		soundLocation := r.URL.Query().Get("soundLocation")
-		err := addSound(discordClient, storedSoundMap, addSoundInput{
-			SoundLocation: soundLocation,
-		})
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprintf(os.Stdout, "%v\n", err)
-			fmt.Fprintf(w, "%v", err)
+		location := r.URL.Query().Get("soundLocation")
+		if location == "" {
+			http.Error(w, "Missing sound location", 400)
 			return
 		}
-
-		w.WriteHeader(http.StatusOK)
+		trackedSwaps.HandleInput(w, swapSoundInput{Add: addSoundInput{SoundLocation: location}})
 	})
 	http.Handle("/sounds", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var buf bytes.Buffer

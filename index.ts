@@ -1,7 +1,7 @@
 // import * as amplitude from '@amplitude/analytics-browser';
 // import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
 import { enableDragDropTouch } from '@dragdroptouch/drag-drop-touch';
-import { isSwitching, isSoundSwitching, switchSound, reconcileSwitches } from './swap-feedback';
+import { isSwitching, isSoundSwitching, switchSound, reconcileSwitches, applySharedSwitches } from './swap-feedback';
 import { connectBoard } from './live-updates';
 import { initUIPreview, syncLibraryPreview, recordRecentSound } from './ui-preview';
 import { initSoundMetadata, decorateSoundMetadata, refreshSoundMetadata } from './sound-metadata';
@@ -338,6 +338,7 @@ connectBoard({
     library: addSoundUpdates,
     played: soundID => playSound(null, soundID, true),
     updated: reconcileSwitches,
+    switches: applySharedSwitches,
     metadata: () => { void refreshSoundMetadata(); },
 });
 

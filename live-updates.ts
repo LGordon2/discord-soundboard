@@ -4,6 +4,7 @@ export type UpdateHooks = {
     played: (soundID: string) => void;
     updated: () => void;
     metadata?: () => void;
+    switches?: (state: unknown) => void;
 };
 
 // The server sends fragments keyed by these IDs. Apply the whole message before
@@ -15,11 +16,16 @@ export const applyBoardUpdate = (html: string, hooks: UpdateHooks) => {
     let libraryChanged = false;
     let played: string | null = null;
     let metadataChanged = false;
+    let switchState: unknown;
     for (const node of Array.from(template.content.children)) {
         const id = node.id;
-        if (!/^(soundboard-\d+|playable-sounds|storedsounds|addsoundscript|playsound|user-count|soundmetadata)$/.test(id)) continue;
+        if (!/^(soundboard-\d+|playable-sounds|storedsounds|addsoundscript|playsound|user-count|soundmetadata|switchstate)$/.test(id)) continue;
         // Updates are declarative; never execute scripts received over a socket.
         node.querySelectorAll('script').forEach(script => script.remove());
+        if (id === 'switchstate') {
+            switchState = JSON.parse(node.getAttribute('data-value') || 'null');
+            continue;
+        }
         if (id === 'playsound') {
             played = node.getAttribute('data-play-sound');
             continue;
@@ -39,6 +45,7 @@ export const applyBoardUpdate = (html: string, hooks: UpdateHooks) => {
             hooks.library(hidden, config?.getAttribute('data-has-empty') === 'true');
         }
     }
+    if (switchState) hooks.switches?.(switchState);
     if (played) hooks.played(played);
     if (metadataChanged) hooks.metadata?.();
     hooks.updated();
@@ -66,6 +73,7 @@ export const connectBoard = (hooks: UpdateHooks) => {
             status.textContent = '';
         };
         connection.onmessage = event => {
+            if (socket !== connection) return;
             try {
                 applyBoardUpdate(event.data as string, hooks);
             } catch (error) {

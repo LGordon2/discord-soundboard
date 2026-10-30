@@ -72,11 +72,17 @@ func addSound(discordClient *DiscordRestClient, storedSounds storedSoundMap, inp
 }
 
 type swapSoundInput struct {
+	Slot   *int             `json:"slot,omitempty"`
 	Add    addSoundInput    `json:"add"`
 	Delete deleteSoundInput `json:"delete"`
 }
 
 func swapSound(client *DiscordRestClient, storedSounds storedSoundMap, input swapSoundInput) error {
+	_, err := swapSoundResult(client, storedSounds, input)
+	return err
+}
+
+func swapSoundResult(client *DiscordRestClient, storedSounds storedSoundMap, input swapSoundInput) (CreateSoundboardSoundResponse, error) {
 	// Finish all local preparation before freeing the Discord slot. An unreadable
 	// replacement must not delete the current sound.
 	var request CreateSoundboardSoundRequest
@@ -84,17 +90,17 @@ func swapSound(client *DiscordRestClient, storedSounds storedSoundMap, input swa
 	if input.Add != (addSoundInput{}) {
 		request, err = prepareStoredSound(storedSounds, input.Add)
 		if err != nil {
-			return err
+			return CreateSoundboardSoundResponse{}, err
 		}
 	}
 	// The board can be full: creation must wait for successful deletion.
 	if input.Delete != (deleteSoundInput{}) {
 		if err := deleteSound(client, guildID, input.Delete); err != nil {
-			return err
+			return CreateSoundboardSoundResponse{}, err
 		}
 	}
 	if input.Add != (addSoundInput{}) {
-		_, err = client.createSoundboardSound(guildID, request)
+		return client.createSoundboardSound(guildID, request)
 	}
-	return err
+	return CreateSoundboardSoundResponse{}, err
 }
