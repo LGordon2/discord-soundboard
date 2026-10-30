@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -31,6 +34,9 @@ type SoundMetadataStore struct {
 	version, savedVersion uint64
 	stop, done            chan struct{}
 	closeOnce             sync.Once
+	encodedVersion        uint64
+	encoded               []byte
+	etag                  string
 }
 
 func newSoundMetadataStore(db *sql.DB) (*SoundMetadataStore, error) {
@@ -81,6 +87,25 @@ func (m *SoundMetadataStore) Snapshot() map[string]SoundMetadata {
 	defer m.mu.RUnlock()
 	return m.snapshotLocked()
 }
+
+// Cache the representation until metadata changes. The content hash remains
+// stable across process restarts and is tied to the exact bytes served.
+func (m *SoundMetadataStore) representation() ([]byte, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.encoded == nil || m.encodedVersion != m.version {
+		data, err := json.Marshal(m.data.Sounds)
+		if err != nil {
+			panic(err)
+		} // SoundMetadata contains only strings.
+		sum := sha256.Sum256(data)
+		m.encoded = data
+		m.etag = fmt.Sprintf(`"%x"`, sum[:16])
+		m.encodedVersion = m.version
+	}
+	return m.encoded, m.etag
+}
+
 func (m *SoundMetadataStore) SetDescription(name, description string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -181,8 +206,8 @@ func (m *SoundMetadataStore) Close() error {
 
 func soundMetadataHandler(store *SoundMetadataStore, knownName func(string) bool, changed func()) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodPut {
-			w.Header().Set("Allow", "GET, PUT")
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
+			w.Header().Set("Allow", "GET, HEAD, PUT")
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
@@ -211,7 +236,14 @@ func soundMetadataHandler(store *SoundMetadataStore, knownName func(string) bool
 				changed()
 			}
 		}
+		data, etag := store.representation()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(store.Snapshot())
+		w.Header().Set("ETag", etag)
+		if r.Method == http.MethodPut {
+			w.Write(data)
+			return
+		}
+		w.Header().Set("Cache-Control", "private, no-cache, no-transform")
+		http.ServeContent(w, r, "sound-metadata.json", time.Time{}, bytes.NewReader(data))
 	})
 }

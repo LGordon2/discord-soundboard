@@ -168,3 +168,68 @@ func TestInvalidEmojiFallsBackWithoutDuplicatingUploadCount(t *testing.T) {
 		t.Fatal("rejected emoji was retained")
 	}
 }
+
+func TestMetadataETagRevalidationAndEdits(t *testing.T) {
+	db := testDatabase(t, filepath.Join(t.TempDir(), "metadata.sqlite3"))
+	store, err := newSoundMetadataStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	handler := soundMetadataHandler(store, func(name string) bool { return name == "known" }, nil)
+	request := func(method, tag, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/sound-metadata", strings.NewReader(body))
+		if tag != "" {
+			req.Header.Set("If-None-Match", tag)
+		}
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		return response
+	}
+	initial := request("GET", "", "")
+	tag := initial.Header().Get("ETag")
+	if initial.Code != 200 || tag == "" || initial.Header().Get("Cache-Control") != "private, no-cache, no-transform" {
+		t.Fatal("missing cache policy or ETag")
+	}
+	for _, validator := range []string{tag, "W/" + tag, `"other", ` + tag, "*"} {
+		cached := request("GET", validator, "")
+		if cached.Code != 304 || cached.Body.Len() != 0 || cached.Header().Get("ETag") != tag {
+			t.Fatalf("validator %s: status=%d body=%s", validator, cached.Code, cached.Body.String())
+		}
+	}
+	head := request("HEAD", "", "")
+	if head.Code != 200 || head.Body.Len() != 0 || head.Header().Get("ETag") != tag {
+		t.Fatal("HEAD incorrect")
+	}
+	edited := request("PUT", tag, `{"soundName":"known","description":"New description"}`)
+	newTag := edited.Header().Get("ETag")
+	if edited.Code != 200 || newTag == tag || edited.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("PUT must update despite read validator")
+	}
+	changed := request("GET", tag, "")
+	if changed.Code != 200 || changed.Header().Get("ETag") != newTag || !strings.Contains(changed.Body.String(), "New description") {
+		t.Fatal("description edit not invalidated")
+	}
+	store.SetDescription("known", "New description")
+	if request("GET", newTag, "").Code != 304 {
+		t.Fatal("no-op edit changed validator")
+	}
+	emoji := "😂"
+	store.SetEmoji("known", nil, &emoji)
+	withEmoji := request("GET", newTag, "")
+	if withEmoji.Code != 200 || withEmoji.Header().Get("ETag") == newTag {
+		t.Fatal("emoji edit not invalidated")
+	}
+	if err := store.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := newSoundMetadataStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reloaded.Close()
+	_, reloadedTag := reloaded.representation()
+	if reloadedTag != withEmoji.Header().Get("ETag") {
+		t.Fatal("validator changed across reload")
+	}
+}

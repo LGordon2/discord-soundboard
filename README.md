@@ -148,3 +148,10 @@ context. `DISCORD_GATEWAY_COMPRESSION=none` restores uncompressed upstream JSON
 if needed. This setting is independent of browser WebSocket compression.
 Gateway READY/disconnect logs include compressed and decoded byte counts without
 logging credentials or payload contents.
+
+`GET /sound-metadata` supports content-based ETags and conditional requests.
+Browsers cache it privately and revalidate before reuse; unchanged data returns
+304 without a response body. Description and emoji changes invalidate the cached
+representation. ETags remain stable across restarts when the content is unchanged.
+PUT responses remain `no-store`, and WebSocket metadata invalidations still trigger
+refreshes. No client-side cache management is required for normal browser fetches.
