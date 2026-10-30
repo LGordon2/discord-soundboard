@@ -155,3 +155,11 @@ Browsers cache it privately and revalidate before reuse; unchanged data returns
 representation. ETags remain stable across restarts when the content is unchanged.
 PUT responses remain `no-store`, and WebSocket metadata invalidations still trigger
 refreshes. No client-side cache management is required for normal browser fetches.
+
+On narrow screens (under 640 px) or touch-first devices, **Preview new UI** also
+turns on larger touch controls, sticky library search/filters, safe-area-aware
+notifications, and tap-to-replace. Tap **Choose slot** on a library card, then
+**Replace …** or **Use free slot** on an editable uploaded slot. **Cancel** or
+Escape exits without uploading; busy and other users' protected slots cannot be
+chosen. The **+** button continues to add directly to a free slot. Leaving preview
+or the mobile layout cancels an active selection. The setting remains browser-local.

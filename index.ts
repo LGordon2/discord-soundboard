@@ -1,3 +1,4 @@
+import { initMobilePreview, decorateMobilePreview, refreshMobilePreview } from './mobile-preview';
 // import * as amplitude from '@amplitude/analytics-browser';
 // import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
 import { enableDragDropTouch } from '@dragdroptouch/drag-drop-touch';
@@ -270,6 +271,7 @@ const hydrate = (root: Element) => {
         }
     });
     decorateSoundMetadata(root);
+    decorateMobilePreview(root);
 };
 
 const showActionError = () => {
@@ -361,13 +363,14 @@ document.getElementById('mute-sounds-checkbox')?.addEventListener('change', mute
 document.getElementById('play-send-sounds-checkbox')?.addEventListener('change', playSendSounds);
 
 initUIPreview();
+initMobilePreview();
 initSoundMetadata(syncLibraryPreview);
 enableDragDropTouch();
 connectBoard({
     hydrate,
     library: addSoundUpdates,
     played: soundID => playSound(null, soundID, true),
-    updated: reconcileSwitches,
+    updated: () => { reconcileSwitches(); refreshMobilePreview(); },
     switches: applySharedSwitches,
     metadata: () => { void refreshSoundMetadata(); },
 });

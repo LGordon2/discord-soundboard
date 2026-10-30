@@ -19,6 +19,10 @@
                 <input id="ui-preview-toggle" type="checkbox" aria-controls="library-tools">
                 Preview new UI
             </label>
+            <div id="mobile-slot-picker" class="mobile-slot-picker" role="group" aria-label="Choose upload slot" tabindex="-1" hidden>
+                <span id="slot-picker-label" role="status"></span>
+                <button id="cancel-slot-picker" type="button">Cancel</button>
+            </div>
             <div id="playable-sounds" role="region" aria-busy="true" aria-label="Uploaded soundboard">
                 <div id="soundboard-0" class="sound-card card-placeholder" aria-hidden="true"></div>
                 <div id="soundboard-1" class="sound-card card-placeholder" aria-hidden="true"></div>
@@ -37,6 +41,7 @@
                     <button type="button" data-library-filter="favorites" aria-pressed="false">Favorites</button>
                     <button type="button" data-library-filter="recent" aria-pressed="false">Recently used</button>
                 </div>
+                <p class="mobile-preview-help">Use + to add to a free slot, or Choose slot to replace a sound.</p>
                 <span id="library-count" role="status"></span>
             </section>
             <div id="storedsounds" role="region" aria-busy="true" aria-label="Sound library">

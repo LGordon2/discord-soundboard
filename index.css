@@ -257,3 +257,74 @@ html.ui-preview #library-tools[hidden] { display: block !important; }
 #library-count { display: block; min-height: 1.5rem; }
 
 .add-sound-component [data-action="add"] { width: 2rem; height: 2rem; }
+
+/* Mobile experiments live behind Preview new UI. */
+.choose-slot, .mobile-preview-help { display: none; }
+@media (max-width: 639px), (pointer: coarse) {
+    html.ui-preview .sound-control,
+    html.ui-preview .sound-details-button,
+    html.ui-preview .favorite-button,
+    html.ui-preview .toast-close {
+        min-width: 44px;
+        min-height: 44px;
+        align-self: center;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    html.ui-preview #playable-sounds .sound-card { height: auto; min-height: 7.5rem; }
+    html.ui-preview #playable-sounds .sound-card.has-description { min-height: 9.5rem; }
+    html.ui-preview .sound-actions { gap: 0.25rem; }
+    html.ui-preview .library-tools {
+        position: sticky;
+        top: 0;
+        z-index: 11;
+        margin-top: 0.5rem;
+        padding: 0.75rem;
+        box-shadow: 0 2px 6px #0002;
+    }
+    html.ui-preview #library-search { font-size: 1rem; min-height: 44px; }
+    html.ui-preview .library-filters { margin: 0.5rem 0; gap: 0.375rem; }
+    html.ui-preview .library-filters button { min-height: 44px; }
+    html.ui-preview .mobile-preview-help { display: block; font-size: 0.75rem; margin-bottom: 0.375rem; }
+    html.ui-preview .choose-slot {
+        display: block;
+        min-height: 44px;
+        margin-top: 0.375rem;
+        border: 1px solid var(--border);
+        border-radius: 0.375rem;
+        color: #0284c7;
+    }
+    html.ui-preview #swap-status:not(:empty) { bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
+    html.ui-preview #playable-sounds { scroll-margin-top: 4.5rem; }
+    html.ui-preview .mobile-slot-picker {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        position: sticky;
+        top: 0;
+        z-index: 12;
+        width: min(80rem, calc(100% - 2rem));
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #0284c7;
+        border-radius: 0.5rem;
+        background: var(--card);
+    }
+    .mobile-slot-picker > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    #cancel-slot-picker { min-height: 44px; padding: 0 0.75rem; }
+    .slot-pick {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        padding: 0.75rem;
+        border: 2px solid #0284c7;
+        border-radius: inherit;
+        background: var(--card);
+        color: var(--text);
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+    .sound-selected { border-color: #0284c7; }
+    .choose-slot:focus-visible, .slot-pick:focus-visible, #cancel-slot-picker:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
+    .mobile-preview #playable-sounds { position: static; }
+}
