@@ -13,6 +13,12 @@ Object.defineProperty(window.HTMLElement.prototype,'inert',{get(){return this.ha
 const preferences=new Map();
 window.localStorage={getItem:key=>preferences.get(key)??null,setItem:(key,value)=>preferences.set(key,value)};
 globalThis.localStorage=window.localStorage;
+// The actual head bootstrap restores the persisted layout before CSS paints.
+preferences.set('soundboard-ui-preview','true');
+new Function(document.head.querySelector('script:not([src])').textContent)();
+assert.equal(document.documentElement.classList.contains('ui-preview'),true);
+preferences.delete('soundboard-ui-preview');
+document.documentElement.classList.remove('ui-preview');
 window.location={href:'https://discord-soundboard.lewgordon.com/'};
 Object.defineProperty(globalThis,'navigator',{value:{maxTouchPoints:0},configurable:true});
 const audios=[];

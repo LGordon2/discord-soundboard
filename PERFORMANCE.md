@@ -122,3 +122,9 @@ run without browser extensions is needed to measure the resulting score.
 Cloudflare's injected analytics beacon and browser-extension scripts shown in the
 report are outside the repository's bundle. Cloudflare Web Analytics can be
 disabled separately if only the local analytics are desired.
+
+After deployment, the public TLS/WebSocket connection through receipt of the
+same 160,858-byte decoded snapshot used 164,800 bytes without compression and
+14,613 bytes with it (91.1% less, including TLS/upgrade overhead). Public JS/CSS
+responses also confirmed the one-year immutable cache policy. These are transfer
+measurements; a replacement Lighthouse run is still needed to quantify CLS.

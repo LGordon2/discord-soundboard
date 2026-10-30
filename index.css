@@ -253,3 +253,4 @@ button[aria-busy="true"] { opacity: 0.5; cursor: progress; }
 .library-placeholder { height: 3rem; }
 /* Restore the persisted preview layout before first paint, without a network request. */
 html.ui-preview #library-tools[hidden] { display: block !important; }
+#library-count { display: block; min-height: 1.5rem; }
