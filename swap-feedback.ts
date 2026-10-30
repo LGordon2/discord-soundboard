@@ -3,6 +3,7 @@ import { recordRecentSound } from './ui-preview';
 type PendingSwap = {
     name: string;
     oldSoundID: string;
+    knownSoundIDs: Set<string>;
     accepted: boolean;
     timer?: ReturnType<typeof setTimeout>;
 };
@@ -64,6 +65,7 @@ const finish = (id: string) => {
     if (pending?.timer) clearTimeout(pending.timer);
     pendingSwaps.delete(id);
     clearCard(id);
+    document.dispatchEvent(new Event('soundboard:switch-state'));
 };
 
 // Discord sends intermediate empty cards over the WebSocket. Reapply the
@@ -72,9 +74,11 @@ export const reconcileSwitches = () => {
     for (const [id, pending] of pendingSwaps) {
         const card = document.getElementById(id);
         if (!card) continue;
-        const soundID = card.getAttribute('data-soundid');
-        if (pending.accepted && soundID && soundID !== pending.oldSoundID &&
-            card.getAttribute('data-soundname') === pending.name) {
+        const available = Array.from(document.querySelectorAll<HTMLElement>('#playable-sounds [data-soundid]')).some(sound => {
+            const id = sound.getAttribute('data-soundid');
+            return id && !pending.knownSoundIDs.has(id) && sound.getAttribute('data-soundname') === pending.name;
+        });
+        if (pending.accepted && available) {
             finish(id);
             recordRecentSound(pending.name);
             announce(`${pending.name} is ready.`, false, 3500);
@@ -102,13 +106,19 @@ export const reconcileSwitches = () => {
 };
 
 export const isSwitching = (id: string) => pendingSwaps.has(id);
+export const isSoundSwitching = (name: string) => {
+    for (const pending of pendingSwaps.values()) if (pending.name === name) return true;
+    return false;
+};
 
 export const switchSound = async (card: HTMLElement, name: string, extension: string) => {
     const id = card.id;
-    if (isSwitching(id)) return;
+    if (isSwitching(id) || isSoundSwitching(name)) return;
     const oldSoundID = card.getAttribute('data-soundid') || '';
-    const pending: PendingSwap = { name, oldSoundID, accepted: false };
+    const knownSoundIDs = new Set(Array.from(document.querySelectorAll('#playable-sounds [data-soundid]'), sound => sound.getAttribute('data-soundid') || ''));
+    const pending: PendingSwap = { name, oldSoundID, knownSoundIDs, accepted: false };
     pendingSwaps.set(id, pending);
+    document.dispatchEvent(new Event('soundboard:switch-state'));
     announce(`Switching to ${name}…`);
     reconcileSwitches();
     try {

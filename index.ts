@@ -1,7 +1,7 @@
 // import * as amplitude from '@amplitude/analytics-browser';
 // import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
 import { enableDragDropTouch } from '@dragdroptouch/drag-drop-touch';
-import { isSwitching, switchSound, reconcileSwitches } from './swap-feedback';
+import { isSwitching, isSoundSwitching, switchSound, reconcileSwitches } from './swap-feedback';
 import { connectBoard } from './live-updates';
 import { initUIPreview, syncLibraryPreview, recordRecentSound } from './ui-preview';
 import { initSoundMetadata, decorateSoundMetadata, refreshSoundMetadata } from './sound-metadata';
@@ -170,11 +170,33 @@ const dragEnd = () => {
     })
 }
 
+const freeSoundSlot = () => Array.from(document.querySelectorAll<HTMLElement>('#playable-sounds .droppable[data-soundid=""]'))
+    .find(card => !isSwitching(card.id));
+
+const updateAddButtons = (hasEmpty: boolean) => {
+    const available = hasEmpty && Boolean(freeSoundSlot());
+    document.querySelectorAll<HTMLElement>('#storedsounds .add-sound-component').forEach(card => {
+        const name = card.getAttribute('data-soundname') || '';
+        const button = card.querySelector<HTMLButtonElement>('button[data-action="add"]');
+        if (!button) return;
+        const pending = isSoundSwitching(name);
+        button.disabled = !available || pending;
+        if (pending && button.getAttribute('aria-busy') !== 'true') {
+            button.setAttribute('aria-busy', 'true');
+            button.innerHTML = '<span class="switch-spinner" aria-hidden="true"></span>';
+        } else if (!pending && button.getAttribute('aria-busy') === 'true') {
+            button.removeAttribute('aria-busy');
+            iconLoad(button, 'plus');
+        }
+        button.setAttribute('aria-label', `${pending ? 'Adding' : 'Add'} ${name}`);
+    });
+};
+
+document.addEventListener('soundboard:switch-state', () => {
+    updateAddButtons(document.getElementById('addsoundscript')?.getAttribute('data-has-empty') === 'true');
+});
+
 const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
-    let disableFn = (el: any) => el.setAttribute('disabled', 'true');
-    if (hasEmpty) {
-        disableFn = (el) => el.removeAttribute('disabled');
-    }
     document.querySelectorAll(".add-sound-component").forEach((el) => {
         const soundName = el.getAttribute('data-soundname');
         if (soundName && hiddenSounds.includes(soundName)) { // should be hidden
@@ -182,8 +204,8 @@ const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
         } else {
             el.classList.remove('hidden');
         }
-        disableFn(el.querySelector('button[data-action="add"]'));
     });
+    updateAddButtons(hasEmpty);
     syncLibraryPreview();
 }
 
@@ -242,6 +264,14 @@ document.addEventListener('click', async event => {
         playSound(card?.id, soundID, false);
         return;
     }
+    if (action === 'add') {
+        const stored = button.closest('.add-sound-component');
+        const name = stored?.getAttribute('data-soundname');
+        const extension = stored?.getAttribute('data-soundext');
+        const slot = freeSoundSlot();
+        if (slot && name && extension) await switchSound(slot, name, extension);
+        return;
+    }
     const query = new URLSearchParams();
     let endpoint: string;
     let method = 'POST';
@@ -262,12 +292,6 @@ document.addEventListener('click', async event => {
             query.set('soundID', button.getAttribute('data-soundid') || soundID);
             query.set('guildID', button.getAttribute('data-guildid') || '');
             break;
-        case 'add': {
-            endpoint = '/add-sound';
-            const stored = button.closest('.add-sound-component');
-            query.set('soundLocation', (stored?.getAttribute('data-soundname') || '') + (stored?.getAttribute('data-soundext') || ''));
-            break;
-        }
         default: return;
     }
     button.disabled = true;
@@ -276,19 +300,13 @@ document.addEventListener('click', async event => {
         const response = await fetch(`${endpoint}?${query}`, { method });
         if (!response.ok) throw new Error('Sound action failed');
         if (action === 'send') recordRecentSound(card?.getAttribute('data-soundname') || '');
-        if (action === 'add') recordRecentSound(button.closest('.add-sound-component')?.getAttribute('data-soundname') || '');
         document.getElementById('action-status')?.replaceChildren();
     } catch {
         showActionError();
     } finally {
         button.removeAttribute('aria-busy');
-        // Replaced buttons retain server permissions; only restore this
-        // request's original button and account for current library capacity.
+        // Replacement nodes already carry the server's current permissions.
         button.disabled = false;
-        if (action === 'add') {
-            const config = document.getElementById('addsoundscript');
-            if (config?.getAttribute('data-has-empty') !== 'true') button.disabled = true;
-        }
     }
 });
 

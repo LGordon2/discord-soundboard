@@ -7,12 +7,12 @@ const dist = resolve(process.env.CLIENT_DIST || 'dist');
 const html=fs.readFileSync(join(dist, 'index.html'),'utf8');
 assert.ok(html.split('\n').length <= 2, 'production HTML should be minified');
 const {window}=parseHTML(html);
-for(const key of ['window','document','Element','HTMLElement','MutationObserver']) globalThis[key]=key==='window'?window:window[key];
+for(const key of ['window','document','Element','HTMLElement','MutationObserver','Event']) globalThis[key]=key==='window'?window:window[key];
 for (const input of document.querySelectorAll('input')) input.checked=false;
 Object.defineProperty(window.HTMLElement.prototype,'inert',{get(){return this.hasAttribute('inert')},set(value){if(value)this.setAttribute('inert','');else this.removeAttribute('inert')}});
 const initialLayout=document.createElement('style');
 initialLayout.id='initial-card-layout';
-initialLayout.textContent='html.ui-preview #soundboard-0{height:9rem;min-height:9rem}';
+initialLayout.textContent='html.ui-preview #soundboard-0{height:8.25rem;min-height:8.25rem}';
 document.head.append(initialLayout);
 const preferences=new Map();
 window.localStorage={getItem:key=>preferences.get(key)??null,setItem:(key,value)=>preferences.set(key,value)};
@@ -37,6 +37,7 @@ let socket;
 globalThis.WebSocket=class {constructor(url){this.url=String(url);socket=this} close(){}};
 const calls=[];
 const metadataCalls=[];
+let failNextSwap=false;
 let savedMetadata={Funny:{description:'From a TV cartoon',emoji_name:'😂'},'Next & Name':{description:'A classic quote',emoji_id:'12345'}};
 const details=document.getElementById('sound-details');
 details.showModal=()=>details.setAttribute('open','');
@@ -47,7 +48,9 @@ globalThis.fetch=async(url,options)=>{
   if(options?.method==='PUT') {const input=JSON.parse(options.body);savedMetadata[input.soundName]={...savedMetadata[input.soundName],description:input.description}}
   return {ok:true,json:async()=>structuredClone(savedMetadata)};
  }
- calls.push({url:String(url),...options});return {ok:true};
+ calls.push({url:String(url),...options});
+ if(url==='/swap-sound' && failNextSwap){failNextSwap=false;return {ok:false}}
+ return {ok:true};
 };
 const bundle=html.match(/src="\/assets\/([^\"]+\.js)"/)[1];
 await import(pathToFileURL(join(dist, 'assets', bundle)).href);
@@ -64,7 +67,7 @@ loadingToggle.checked=false;
 loadingToggle.dispatchEvent(new window.Event('change'));
 assert.equal(document.documentElement.classList.contains('ui-preview'),false);
 socket.onopen();
-socket.onmessage({data:`<div id="playable-sounds"><div id="soundboard-0" class="droppable" data-soundid="123" data-soundname="A &amp; B"><button data-action="send" data-icon="play"></button><button data-action="save" data-icon="save"></button><button data-action="delete" data-icon="minus" data-soundid="123" data-guildid="456"></button><button data-action="send" disabled id="locked"></button><button data-action="preview"></button></div></div><div id="addsoundscript" data-hidden-sounds="[&quot;Live&quot;]" data-has-empty="true"></div><div id="storedsounds"><div class="add-sound-component" draggable="true" data-soundname="Next &amp; Name" data-soundext=".ogg"><div class="sound-header"><h5>Next &amp; Name</h5><button data-action="add" data-icon="plus"></button></div></div><div class="add-sound-component" data-soundname="Funny" data-soundext=".mp3"><div class="sound-header"><h5>Funny</h5><button data-action="add"></button></div></div><div class="add-sound-component hidden" data-soundname="Live" data-soundext=".ogg"><div class="sound-header"><h5>Live</h5><button data-action="add"></button></div></div></div>`});
+socket.onmessage({data:`<div id="playable-sounds"><div id="soundboard-0" class="droppable" data-soundid="123" data-soundname="A &amp; B"><button data-action="send" data-icon="play"></button><button data-action="save" data-icon="save"></button><button data-action="delete" data-icon="minus" data-soundid="123" data-guildid="456"></button><button data-action="send" disabled id="locked"></button><button data-action="preview"></button></div><div id="soundboard-1" class="sound-card droppable" data-soundid="" data-soundname=""><div class="sound-empty">Free</div></div><div id="soundboard-2" class="sound-card droppable" data-soundid="" data-soundname=""><div class="sound-empty">Free</div></div></div><div id="addsoundscript" data-hidden-sounds="[&quot;Live&quot;]" data-has-empty="true"></div><div id="storedsounds"><div class="add-sound-component" draggable="true" data-soundname="Next &amp; Name" data-soundext=".ogg"><div class="sound-header"><h5>Next &amp; Name</h5><button data-action="add" data-icon="plus"></button></div></div><div class="add-sound-component" data-soundname="Funny" data-soundext=".mp3"><div class="sound-header"><h5>Funny</h5><button data-action="add"></button></div></div><div class="add-sound-component hidden" data-soundname="Live" data-soundext=".ogg"><div class="sound-header"><h5>Live</h5><button data-action="add"></button></div></div></div>`});
 assert.ok(document.querySelector('[data-icon="play"] svg'));
 assert.equal(document.getElementById('initial-card-layout'),null,'release sizing hints after board and metadata are ready');
 const click=async selector=>{document.querySelector(selector).dispatchEvent(new window.Event('click',{bubbles:true}));await new Promise(setImmediate)};
@@ -78,7 +81,18 @@ assert.equal(calls[0].url,'/send-sound?soundID=123');
 assert.equal(calls[1].url,'/save-sound?soundID=123&soundName=A+%26+B');
 assert.equal(calls[2].method,'DELETE');
 assert.equal(calls[2].url,'/delete-sound?soundID=123&guildID=456');
-assert.equal(calls[3].url,'/add-sound?soundLocation=Next+%26+Name.ogg');
+assert.equal(calls[3].url,'/swap-sound');
+assert.deepEqual(JSON.parse(calls[3].body),{add:{soundLocation:'Next & Name.ogg'}});
+assert.ok(document.querySelector('#soundboard-1 .switch-overlay'),'plus shows the same target-slot loading state');
+assert.ok(document.querySelector('[data-action="add"] .switch-spinner'),'plus becomes a spinner');
+assert.equal(document.querySelector('[data-action="add"]').disabled,true);
+await click('[data-action="add"]');
+assert.equal(calls.length,4,'pending add cannot be submitted twice');
+socket.onmessage({data:'<div id="soundboard-1" class="sound-card droppable" data-soundid="other-client" data-soundname="Other"><div class="sound-header"><h5>Other</h5></div></div><div id="soundboard-2" class="sound-card droppable" data-soundid="added" data-soundname="Next &amp; Name"><div class="sound-header"><h5>Next &amp; Name</h5></div></div>'});
+assert.equal(document.querySelector('#soundboard-1 .switch-overlay'),null);
+assert.equal(document.querySelector('[data-action="add"]').hasAttribute('aria-busy'),false);
+// Another client freeing the slot updates capacity through the normal config fragment.
+socket.onmessage({data:'<div id="soundboard-1" class="sound-card droppable" data-soundid="" data-soundname=""><div class="sound-empty">Free</div></div><div id="soundboard-2" class="sound-card droppable" data-soundid="" data-soundname=""><div class="sound-empty">Free</div></div><div id="addsoundscript" data-hidden-sounds="[&quot;Live&quot;]" data-has-empty="true"></div>'});
 await click('[data-action="preview"]');
 const preview=audios.at(-1);
 preview.emit('canplaythrough');
@@ -211,6 +225,14 @@ assert.equal(document.querySelector('[data-edit-description]'),null);
 assert.equal(document.querySelector('[data-soundname="Funny"]').hidden,false);
 assert.equal(document.querySelector('[data-soundname="Live"]').classList.contains('hidden'),true);
 assert.equal(document.querySelector('[data-action="add"]').disabled,true);
+// A rejected plus upload restores both the free slot and its source control.
+socket.onmessage({data:'<div id="addsoundscript" data-hidden-sounds="[&quot;Live&quot;]" data-has-empty="true"></div>'});
+failNextSwap=true;
+await click('[data-action="add"]');
+assert.equal(document.querySelector('#soundboard-1 .switch-overlay'),null);
+assert.equal(document.querySelector('[data-action="add"]').disabled,false);
+assert.equal(document.querySelector('[data-action="add"] .switch-spinner'),null);
+assert.match(document.getElementById('swap-status').textContent,/Could not confirm/);
 assert.doesNotMatch(html,/cdn\.tailwindcss\.com|<script[^>]+src=["']https?:/);
 for(const selector of ['.sound-card','.sound-header','.sound-actions','.sound-drop-target','.sound-playing','.sound-setting','.switch-track','.sound-details-button']) {
  assert.ok(css.includes(selector),`missing component style: ${selector}`);

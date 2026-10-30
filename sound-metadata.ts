@@ -1,5 +1,5 @@
 type SoundMetadata = { description: string; emoji_id?: string; emoji_name?: string };
-let metadata: Record<string, SoundMetadata> = {};
+let metadata: Record<string, SoundMetadata> = Object.create(null);
 let onUpdate = () => {};
 let requestVersion = 0;
 let metadataReady = false;
@@ -9,7 +9,7 @@ export const getSoundMetadata = (name: string): SoundMetadata | undefined => met
 
 const applyMetadata = (value: unknown) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
-    const next: Record<string, SoundMetadata> = {};
+    const next: Record<string, SoundMetadata> = Object.create(null);
     for (const [name, entry] of Object.entries(value)) {
         if (!entry || typeof entry !== 'object' || typeof entry.description !== 'string') continue;
         next[name] = {

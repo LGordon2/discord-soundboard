@@ -240,11 +240,11 @@ button[aria-busy="true"] { opacity: 0.5; cursor: progress; }
 }
 
 .ui-preview .sound-card { display: flex; flex-direction: column; height: 6rem; min-height: 6rem; }
-.ui-preview .sound-card.has-description { height: 9rem; min-height: 9rem; }
+.ui-preview .sound-card.has-description { height: 8.25rem; min-height: 8.25rem; }
 .ui-preview .sound-card .sound-actions { margin-top: auto; min-height: 2.5rem; }
 .sound-empty { flex: 1; }
-.ui-preview .sound-card .sound-title { margin-bottom: 0.25rem; }
-.sound-card .sound-description { margin-top: 0; padding-top: 0; padding-bottom: 0.375rem; }
+.ui-preview .sound-card .sound-title { margin-bottom: 0.125rem; }
+.sound-card .sound-description { margin-top: 0; padding-top: 0; padding-bottom: 0.125rem; line-height: 1.35; }
 
 
 /* Reserve the first viewport until the initial atomic WebSocket snapshot lands. */
@@ -255,3 +255,5 @@ button[aria-busy="true"] { opacity: 0.5; cursor: progress; }
 /* Restore the persisted preview layout before first paint, without a network request. */
 html.ui-preview #library-tools[hidden] { display: block !important; }
 #library-count { display: block; min-height: 1.5rem; }
+
+.add-sound-component [data-action="add"] { width: 2rem; height: 2rem; }

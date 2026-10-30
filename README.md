@@ -110,3 +110,7 @@ hashed assets. HTML revalidates on refresh. Initial board/library placeholders
 reserve layout space until the complete snapshot arrives; preview cards expand only when they have description text. The server supplies
 initial per-card sizing hints to avoid reserving blank description space. Automatic local echoes do not load audio when
 muted or when “Play send sounds” is off.
+
+Clicking **+** and dropping a library sound use the same pending state: a spinner
+on the source add button and target slot until Discord confirms the new sound.
+Pending sounds/slots cannot be submitted twice; failures restore the controls.
