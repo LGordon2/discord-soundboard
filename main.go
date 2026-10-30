@@ -235,7 +235,7 @@ func main() {
 	}
 	analyticsRoutes := analyticsHandler(analytics, soundName, func(filename string) (string, bool) { return librarySoundName(soundsDir, filename) })
 	http.Handle("/library-audio", libraryAudioHandler(soundsDir))
-	http.Handle("/analytics", analyticsRoutes)
+
 	http.Handle("/analytics/play", analyticsRoutes)
 
 	msgUpdates := make(chan []byte, 100)
@@ -335,6 +335,43 @@ func main() {
 	}
 	uploadLogin := &uploadAuth{db: database, clientID: oauthID, clientSecret: oauthSecret, redirectURI: redirectURI, allowlistFile: allowlistFile, allowedIDs: os.Getenv("UPLOAD_ALLOWED_USER_IDS"), client: &http.Client{Timeout: 15 * time.Second}, tokenURL: "https://discord.com/api/oauth2/token", userURL: "https://discord.com/api/v10/users/@me", authorizeURL: "https://discord.com/oauth2/authorize", now: time.Now}
 	uploadLogin.register(http.DefaultServeMux)
+	http.Handle("/analytics", &analyticsPageHandler{auth: uploadLogin, analytics: analytics})
+	http.Handle("/analytics/data", analyticsDataHandler(uploadLogin, analyticsRoutes))
+	http.Handle("/admin", &adminHandler{auth: uploadLogin, directory: soundsDir, metadata: metadata, commitMu: &libraryMu, publish: func(oldName, newName string) {
+		old := library.Load()
+		files := make([]string, 0, len(old.files))
+		uploads := make(map[string]CreateSoundboardSoundRequest, len(old.uploads))
+		for _, filename := range old.files {
+			ext := filepath.Ext(filename)
+			if strings.TrimSuffix(filename, ext) == oldName {
+				if newName == "" {
+					continue
+				}
+				renamed := newName + ext
+				files = append(files, renamed)
+				if request, ok := old.uploads[filename]; ok {
+					request.Name = newName
+					uploads[renamed] = request
+				}
+			} else {
+				files = append(files, filename)
+				if request, ok := old.uploads[filename]; ok {
+					uploads[filename] = request
+				}
+			}
+		}
+		sort.Slice(files, func(i, j int) bool { return strings.ToLower(files[i]) < strings.ToLower(files[j]) })
+		library.Store(&soundLibrary{files: files, uploads: uploads})
+		soundsMu.RLock()
+		current := make([]SoundboardSoundWithOrdinal, 0, len(sounds))
+		for slot, sound := range sounds {
+			current = append(current, SoundboardSoundWithOrdinal{SoundboardSound: sound, ordinal: slot})
+		}
+		soundsMu.RUnlock()
+		frame := updateStoredSounds(current)
+		frame.Write(liveFrame(liveEvent{Type: "metadata"}))
+		msgUpdates <- frame.Bytes()
+	}})
 
 	http.Handle("/upload-sound", &soundUploadHandler{directory: soundsDir, authorize: uploadLogin.authorize, metadata: metadata, commitMu: &libraryMu, running: make(chan struct{}, 1), convert: convertUploadEdit, publish: func(filename string, request CreateSoundboardSoundRequest) {
 		old := library.Load()

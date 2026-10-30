@@ -289,7 +289,7 @@ func TestEmojiEditingPersistsAndSurvivesGatewaySnapshots(t *testing.T) {
 	if store.Snapshot()["known"].EmojiID != "12345" {
 		t.Fatal("description-only edit erased emoji")
 	}
-	for _, emoji := range []string{"hello", "<script>alert(1)</script>", "18446744073709551616", strings.Repeat("😂", 33)} {
+	for _, emoji := range []string{"😂🎉", "👩🏽‍🚀👍🏽", "🇺🇸🇨🇦", "1️⃣2️⃣", "<:a:12345><:b:67890>", "hello", "<script>alert(1)</script>", "18446744073709551616", strings.Repeat("😂", 33)} {
 		body, _ := json.Marshal(map[string]string{"soundName": "known", "description": "should not apply", "emoji": emoji})
 		if update(string(body)).Code != 400 {
 			t.Fatalf("invalid emoji accepted: %q", emoji)

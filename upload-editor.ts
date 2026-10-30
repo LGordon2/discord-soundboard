@@ -34,7 +34,7 @@ export const createUploadEditor = (audio: HTMLAudioElement, changed: (valid: boo
     let gain: GainNode | undefined;
     const selection = (): ClipSelection => ({start:Number(start.value),end:Number(end.value),volume:Number(volume.value)/100});
     const valid = () => {const clip=selection();return duration>0&&clip.start>=0&&clip.end>clip.start&&clip.end<=duration+.001&&clip.end-clip.start<=5.001;};
-    const stop = () => {playVersion++;clearTimeout(timer);audio.pause?.();playing=false;preview.textContent='Preview clip';preview.setAttribute('aria-pressed','false');};
+    const stop = () => {playVersion++;clearTimeout(timer);audio.pause?.();playing=false;preview.setAttribute('aria-label','Play selected clip');preview.title='Play selected clip';preview.setAttribute('aria-pressed','false');};
     const applyVolume = () => {
         const value=selection().volume;
         if (gain && context) {audio.volume=1;gain.gain.setValueAtTime(value,context.currentTime);}
@@ -170,7 +170,7 @@ export const createUploadEditor = (audio: HTMLAudioElement, changed: (valid: boo
         try {
             if(!context&&window.AudioContext){context=new AudioContext();const source=context.createMediaElementSource(audio);gain=context.createGain();source.connect(gain);gain.connect(context.destination);}
             if(context)void context.resume().catch(()=>{});
-            applyVolume();audio.currentTime=selection().start;playing=true;preview.textContent='Stop preview';preview.setAttribute('aria-pressed','true');
+            applyVolume();audio.currentTime=selection().start;playing=true;preview.setAttribute('aria-label','Stop preview');preview.title='Stop preview';preview.setAttribute('aria-pressed','true');
             void audio.play().catch(()=>{if(version!==playVersion)return;stop();status.textContent='Could not play this clip. Try again.';});
         } catch {stop();status.textContent='Could not play this clip. Try again.';}
     });

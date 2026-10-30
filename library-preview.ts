@@ -1,3 +1,4 @@
+import { trackSoundProgress, stopSoundProgress } from './sound-progress';
 let current: {audio: HTMLAudioElement; button: HTMLButtonElement; card: HTMLElement} | null = null;
 let recent = (_name: string) => {};
 let muted = () => false;
@@ -23,7 +24,7 @@ export const stopLibraryPreview = () => {
     current = null;
     if (!previous) return;
     previous.audio.pause();
-    previous.card.classList.remove('sound-playing');
+    stopSoundProgress(previous.card);
     resetButton(previous.button);
 };
 export const decorateLibraryPreview = (card: HTMLElement) => {
@@ -69,6 +70,7 @@ export const initLibraryPreview = (onRecent: (name: string) => void, isMuted: ()
         const filename = name + (card.getAttribute('data-soundext') || '');
         const audio = new Audio(`/library-audio?${new URLSearchParams({file: filename})}`);
         current = {audio, button, card};
+        trackSoundProgress(card, audio);
         button.setAttribute('aria-busy', 'true');
         button.setAttribute('aria-pressed', 'true');
         setPreviewIcon(button, 'loading');
@@ -77,7 +79,6 @@ export const initLibraryPreview = (onRecent: (name: string) => void, isMuted: ()
             if (current?.audio !== audio) return;
             button.removeAttribute('aria-busy');
             setPreviewIcon(button, 'playing');
-            card.classList.add('sound-playing');
             recent(name);
             void fetch('/analytics/play', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({soundLocation: filename}), keepalive: true}).catch(() => {});
         }, {once: true});

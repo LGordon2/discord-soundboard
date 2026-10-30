@@ -6,6 +6,7 @@ require (
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/rivo/uniseg v0.4.7
 	github.com/segmentio/encoding v0.4.0
 	github.com/tdewolff/minify v2.3.6+incompatible
 )

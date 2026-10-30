@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 )
@@ -15,16 +16,25 @@ type SoundCounts struct {
 	Played uint64 `json:"played"`
 }
 
+type AnalyticsBucket struct {
+	At time.Time `json:"at"`
+	SoundCounts
+}
+
 type AnalyticsSnapshot struct {
-	Version   int                    `json:"version"`
-	Since     time.Time              `json:"since"`
-	UpdatedAt time.Time              `json:"updated_at"`
-	Totals    SoundCounts            `json:"totals"`
-	Sounds    map[string]SoundCounts `json:"sounds"`
+	HistorySince time.Time              `json:"history_since"`
+	Hourly       []AnalyticsBucket      `json:"hourly,omitempty"`
+	Version      int                    `json:"version"`
+	Since        time.Time              `json:"since"`
+	UpdatedAt    time.Time              `json:"updated_at"`
+	Totals       SoundCounts            `json:"totals"`
+	Sounds       map[string]SoundCounts `json:"sounds"`
 }
 
 // Record only touches memory; changed rows are committed in a background transaction.
 type LocalAnalytics struct {
+	hours        map[string]SoundCounts
+	dirtyHours   map[string]uint64
 	mu           sync.RWMutex
 	flushMu      sync.Mutex
 	state        AnalyticsSnapshot
@@ -38,7 +48,7 @@ type LocalAnalytics struct {
 }
 
 func newLocalAnalytics(db *sql.DB) (*LocalAnalytics, error) {
-	a := &LocalAnalytics{db: db, state: AnalyticsSnapshot{Version: 1, Sounds: make(map[string]SoundCounts)}, dirty: make(map[string]uint64), stop: make(chan struct{}), done: make(chan struct{})}
+	a := &LocalAnalytics{hours: make(map[string]SoundCounts), dirtyHours: make(map[string]uint64), db: db, state: AnalyticsSnapshot{Version: 1, Sounds: make(map[string]SoundCounts)}, dirty: make(map[string]uint64), stop: make(chan struct{}), done: make(chan struct{})}
 	var since, updated string
 	if err := db.QueryRow("SELECT since,updated_at,added,sent,played FROM analytics_state WHERE id=1").Scan(&since, &updated, &a.state.Totals.Added, &a.state.Totals.Sent, &a.state.Totals.Played); err != nil {
 		return nil, err
@@ -48,6 +58,13 @@ func newLocalAnalytics(db *sql.DB) (*LocalAnalytics, error) {
 		return nil, err
 	}
 	if a.state.UpdatedAt, err = time.Parse(time.RFC3339Nano, updated); err != nil {
+		return nil, err
+	}
+	var historySince string
+	if err := db.QueryRow("SELECT value FROM app_settings WHERE key='analytics_history_since'").Scan(&historySince); err != nil {
+		return nil, err
+	}
+	if a.state.HistorySince, err = time.Parse(time.RFC3339Nano, historySince); err != nil {
 		return nil, err
 	}
 	rows, err := db.Query("SELECT name,added,sent,played FROM sound_counts")
@@ -66,6 +83,29 @@ func newLocalAnalytics(db *sql.DB) (*LocalAnalytics, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	rows.Close()
+	hourly, err := db.Query("SELECT hour,added,sent,played FROM analytics_hourly")
+	if err != nil {
+		return nil, err
+	}
+	for hourly.Next() {
+		var hour string
+		var counts SoundCounts
+		if err := hourly.Scan(&hour, &counts.Added, &counts.Sent, &counts.Played); err != nil {
+			hourly.Close()
+			return nil, err
+		}
+		if _, err := time.Parse(time.RFC3339, hour); err != nil {
+			hourly.Close()
+			return nil, err
+		}
+		a.hours[hour] = counts
+	}
+	if err := hourly.Err(); err != nil {
+		hourly.Close()
+		return nil, err
+	}
+	hourly.Close()
 	go func() {
 		defer close(a.done)
 		ticker := time.NewTicker(5 * time.Second)
@@ -98,7 +138,8 @@ func incrementCounts(counts *SoundCounts, event string) bool {
 	return true
 }
 
-func (a *LocalAnalytics) Record(event, name string) {
+func (a *LocalAnalytics) Record(event, name string) { a.recordAt(event, name, time.Now().UTC()) }
+func (a *LocalAnalytics) recordAt(event, name string, at time.Time) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if !incrementCounts(&a.state.Totals, event) {
@@ -107,9 +148,14 @@ func (a *LocalAnalytics) Record(event, name string) {
 	counts := a.state.Sounds[name]
 	incrementCounts(&counts, event)
 	a.state.Sounds[name] = counts
-	a.state.UpdatedAt = time.Now().UTC()
+	a.state.UpdatedAt = at.UTC()
 	a.version++
 	a.dirty[name] = a.version
+	hour := at.UTC().Truncate(time.Hour).Format(time.RFC3339)
+	counts = a.hours[hour]
+	incrementCounts(&counts, event)
+	a.hours[hour] = counts
+	a.dirtyHours[hour] = a.version
 }
 
 func (a *LocalAnalytics) snapshotLocked() AnalyticsSnapshot {
@@ -118,6 +164,11 @@ func (a *LocalAnalytics) snapshotLocked() AnalyticsSnapshot {
 	for name, counts := range a.state.Sounds {
 		snapshot.Sounds[name] = counts
 	}
+	for hour, counts := range a.hours {
+		at, _ := time.Parse(time.RFC3339, hour)
+		snapshot.Hourly = append(snapshot.Hourly, AnalyticsBucket{At: at, SoundCounts: counts})
+	}
+	sort.Slice(snapshot.Hourly, func(i, j int) bool { return snapshot.Hourly[i].At.Before(snapshot.Hourly[j].At) })
 	return snapshot
 }
 
@@ -141,6 +192,10 @@ func (a *LocalAnalytics) Flush() error {
 	for name := range a.dirty {
 		changed[name] = a.state.Sounds[name]
 	}
+	changedHours := make(map[string]SoundCounts, len(a.dirtyHours))
+	for hour := range a.dirtyHours {
+		changedHours[hour] = a.hours[hour]
+	}
 	a.mu.RUnlock()
 	tx, err := a.db.Begin()
 	if err != nil {
@@ -160,6 +215,11 @@ func (a *LocalAnalytics) Flush() error {
 			return err
 		}
 	}
+	for hour, counts := range changedHours {
+		if _, err := tx.Exec("INSERT INTO analytics_hourly(hour,added,sent,played) VALUES(?,?,?,?) ON CONFLICT(hour) DO UPDATE SET added=excluded.added,sent=excluded.sent,played=excluded.played", hour, counts.Added, counts.Sent, counts.Played); err != nil {
+			return err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
@@ -168,6 +228,11 @@ func (a *LocalAnalytics) Flush() error {
 	for name, revision := range a.dirty {
 		if revision <= version {
 			delete(a.dirty, name)
+		}
+	}
+	for hour, revision := range a.dirtyHours {
+		if revision <= version {
+			delete(a.dirtyHours, hour)
 		}
 	}
 	a.mu.Unlock()
@@ -184,7 +249,7 @@ func (a *LocalAnalytics) Close() error {
 // rather than allowing arbitrary names or event types into persistent counters.
 func analyticsHandler(a *LocalAnalytics, soundName func(string) (string, bool), libraryName ...func(string) (string, bool)) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/analytics", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/analytics/data", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", "GET")
 			w.WriteHeader(http.StatusMethodNotAllowed)

@@ -32,10 +32,11 @@ const audios=[];
 let failNextAudio=false;
 let deferNextAudio=false;
 globalThis.Audio=class {
- constructor(src){this.src=src;this.paused=true;this.handlers=new Map();this.duration=0.01;audios.push(this)}
- addEventListener(name,fn,options){this.handlers.set(name,{fn,once:options?.once})}
- emit(name){const handler=this.handlers.get(name);if(!handler)return;if(handler.once)this.handlers.delete(name);handler.fn()}
- pause(){this.paused=true}
+ constructor(src){this.src=src;this.paused=true;this.handlers=new Map();this.duration=0.01;this.currentTime=0;audios.push(this)}
+ addEventListener(name,fn,options){const list=this.handlers.get(name)||[];list.push({fn,once:options?.once});this.handlers.set(name,list)}
+ removeEventListener(name,fn){this.handlers.set(name,(this.handlers.get(name)||[]).filter(handler=>handler.fn!==fn))}
+ emit(name){for(const handler of [...(this.handlers.get(name)||[])]){if(handler.once)this.removeEventListener(name,handler.fn);handler.fn()}}
+ pause(){this.paused=true;this.emit('pause')}
  play(){if(failNextAudio){failNextAudio=false;return Promise.reject(Error('playback failed'))}this.paused=false;if(deferNextAudio){deferNextAudio=false;return Promise.resolve()}this.emit('playing');return Promise.resolve()}
 };
 let socket;
@@ -45,14 +46,15 @@ const metadataCalls=[];
 let failNextSwap=false;
 let holdNextUpload=false;
 let pendingUploadReply;
-let uploadAccount={configured:true,canUpload:true,csrf:'test-csrf',user:{id:'12345',username:'tester'}};
+let failNextLogout=false;
+let uploadAccount={configured:true,canUpload:true,csrf:'test-csrf',user:{id:'12345',username:'tester',avatar:'abc123'}};
 let savedMetadata={Funny:{description:'From a TV cartoon',emoji_name:'😂'},'Next & Name':{description:'A classic quote',emoji_id:'12345'}};
 const details=document.getElementById('sound-details');
 details.showModal=()=>details.setAttribute('open','');
 details.close=()=>details.removeAttribute('open');
 globalThis.fetch=async(url,options)=>{
  if(url==='/auth/session')return {ok:true,json:async()=>structuredClone(uploadAccount)};
- if(url==='/auth/logout'){uploadAccount={configured:true,canUpload:false,csrf:'',user:undefined};return {ok:true}};
+ if(url==='/auth/logout'){assert.equal(options.headers['X-CSRF-Token'],uploadAccount.csrf);if(failNextLogout){failNextLogout=false;return {ok:false}};uploadAccount={configured:true,canUpload:false,csrf:'',user:undefined};return {ok:true}};
  if(url==='/sound-metadata') {
   metadataCalls.push(options?.method||'GET');
   if(options?.method==='PUT') {
@@ -115,8 +117,11 @@ assert.equal(document.querySelector('[data-action="add"]').hasAttribute('aria-bu
 socket.onmessage({data:'<div id="soundboard-1" class="sound-card droppable" data-soundid="" data-soundname=""><div class="sound-empty">Free</div></div><div id="soundboard-2" class="sound-card droppable" data-soundid="" data-soundname=""><div class="sound-empty">Free</div></div><div id="addsoundscript" data-hidden-sounds="[&quot;Live&quot;]" data-has-empty="true"></div>'});
 await click('[data-action="preview"]');
 const preview=audios.at(-1);
+preview.duration=4;preview.currentTime=1;
 preview.emit('canplaythrough');
-preview.emit('playing');
+preview.emit('playing');preview.emit('timeupdate');
+assert.equal(document.querySelector('#soundboard-0 .sound-playback-progress span').style.transform,'scaleX(0.25)');
+preview.emit('ended');assert.equal(document.querySelector('#soundboard-0 .sound-playback-progress'),null);
 assert.equal(calls.length,5);
 assert.equal(calls[4].url,'/analytics/play');
 assert.deepEqual(JSON.parse(calls[4].body),{soundID:'123'});
@@ -450,6 +455,8 @@ await tapButton(previewButtons()[0]);
 const localOgg=audios.at(-1);
 assert.equal(localOgg.src,'/library-audio?file=Local+%26+%22quote%22.ogg');
 assert.equal(localOgg.paused,false);
+localOgg.duration=4;localOgg.currentTime=2;localOgg.emit('timeupdate');
+assert.equal(previewButtons()[0].closest('.add-sound-component').querySelector('.sound-playback-progress span').style.transform,'scaleX(0.5)');
 assert.equal(previewButtons()[0].getAttribute('data-preview-state'),'playing');
 assert.equal(previewButtons()[0].getAttribute('aria-pressed'),'true');
 assert.deepEqual(JSON.parse(calls.filter(call=>call.url==='/analytics/play').at(-1).body),{soundLocation:'Local & "quote".ogg'});
@@ -458,6 +465,7 @@ assert.equal(calls.filter(call=>call.url==='/analytics/play').length,initialLoca
 await tapButton(previewButtons()[1]);
 const localMp3=audios.at(-1);
 assert.equal(localOgg.paused,true);
+assert.equal(previewButtons()[0].closest('.add-sound-component').querySelector('.sound-playback-progress'),null);
 assert.equal(previewButtons()[0].getAttribute('data-preview-state'),'idle');
 assert.equal(localMp3.src,'/library-audio?file=Local+MP3.mp3');
 await tapButton(previewButtons()[1]);
@@ -511,7 +519,7 @@ console.log('PASS: uploaded and local previews stop each other, including delaye
 
 wire({type:'board',slots:[],hasEmpty:true,library:[['Editable emoji','.ogg']]});
 await click('[data-edit-description="Editable emoji"]');
-const emojiEditor=document.getElementById('sound-emoji');
+const emojiEditor=document.getElementById('sound-emoji');assert.equal(emojiEditor.type,'hidden');
 assert.equal(emojiEditor.value,'');
 emojiEditor.value='🦆';
 const saveDetails=async()=>{document.getElementById('sound-details-form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await new Promise(setImmediate)};
@@ -527,7 +535,8 @@ assert.equal(emojiEditor.value,'12345');
 emojiEditor.value='invalid text';
 await saveDetails();
 assert.equal(details.hasAttribute('open'),true);
-assert.equal(document.getElementById('sound-details-error').textContent,'Use a Unicode emoji or custom emoji ID');
+assert.equal(document.getElementById('sound-details-error').textContent,'Choose one emoji or one Discord custom emoji; leave blank to remove.');
+const beforeMultiEmojiCalls=metadataCalls.length;emojiEditor.value='🦆🎉';await saveDetails();assert.equal(metadataCalls.length,beforeMultiEmojiCalls);assert.equal(details.hasAttribute('open'),true);
 emojiEditor.value='';
 await saveDetails();
 assert.equal(document.querySelector('[data-soundname="Editable emoji"] .sound-emoji'),null);
@@ -570,7 +579,7 @@ await click('#choose-sound-emoji');
 for(let i=0;i<30&&!picker.querySelector('.emoji-search');i++)await new Promise(setImmediate);
 const noMatch=picker.querySelector('.emoji-search');noMatch.value='nonexistent-emoji-xyz';noMatch.dispatchEvent(new window.Event('input'));
 assert.equal(picker.querySelectorAll('.emoji-grid button').length,0);assert.ok(picker.textContent.includes('No matching emoji'));
-await click('#clear-sound-emoji');assert.equal(emojiEditor.value,'');assert.equal(picker.hidden,true);
+assert.equal(document.getElementById('clear-sound-emoji').hidden,false);await click('#clear-sound-emoji');assert.equal(document.getElementById('clear-sound-emoji').hidden,true);assert.equal(emojiEditor.value,'');assert.equal(picker.hidden,true);
 console.log('PASS: lazy emoji selector, search, categories, skin tones, known custom emoji, saving and removal');
 
 await click('#choose-sound-emoji');
@@ -587,14 +596,15 @@ const uploadForm=document.getElementById('sound-upload-form');
 const uploadFile=document.getElementById('upload-file');
 const uploadName=document.getElementById('upload-name');
 const uploadDescription=document.getElementById('upload-description');
-const uploadEmoji=document.getElementById('upload-emoji');
+const uploadEmoji=document.getElementById('upload-emoji');assert.equal(uploadEmoji.type,'hidden');
 const uploadAudio=document.getElementById('upload-audio-preview');
 Object.defineProperty(uploadFile,'files',{value:[],writable:true,configurable:true});
 uploadForm.reset=()=>{for(const el of [uploadName,uploadDescription,uploadEmoji])el.value='';uploadFile.files=[]};
 details.close();
-await click('#open-sound-upload');
+await click('#open-sound-upload');assert.equal(document.getElementById('upload-step-label').hidden,false);
 for(let i=0;i<100&&!uploadDialog.hasAttribute('open');i++)await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(uploadDialog.hasAttribute('open'),true);
+assert.equal(document.getElementById('upload-account').hidden,true);assert.equal(document.getElementById('upload-discord-login').hidden,true);assert.equal(document.getElementById('preview-account').hidden,false);assert.equal(document.getElementById('preview-account-identity').textContent,'Signed in as tester');assert.ok(document.querySelector('#preview-account-identity img').src.endsWith('/12345/abc123.webp?size=32'));
 uploadFile.files=[new File(['sample audio'],'My upload.wav',{type:'audio/wav'})];
 uploadFile.dispatchEvent(new window.Event('change'));
 assert.equal(uploadName.value,'My upload');assert.ok(uploadAudio.src.startsWith('blob:'));assert.equal(document.getElementById('upload-edit-step').hidden,false);
@@ -636,13 +646,15 @@ console.log('PASS: edge grabbers, duration-preserving middle drag, stable gestur
 clipStart.value='3';clipStart.dispatchEvent(new window.Event('input'));clipEnd.value='7';clipEnd.dispatchEvent(new window.Event('input'));
 clipVolume.value='40';clipVolume.dispatchEvent(new window.Event('input'));assert.equal(uploadAudio.volume,.4);
 uploadAudio.play=()=>{uploadAudio.dispatchEvent(new window.Event('playing'));return Promise.resolve()};uploadAudio.pause=()=>{};
-await click('#preview-upload-clip');assert.equal(uploadAudio.currentTime,3);assert.equal(document.getElementById('preview-upload-clip').textContent,'Stop preview');
-uploadAudio.currentTime=7;uploadAudio.dispatchEvent(new window.Event('timeupdate'));assert.equal(document.getElementById('preview-upload-clip').textContent,'Preview clip');
+await click('#preview-upload-clip');assert.equal(uploadAudio.currentTime,3);assert.equal(document.getElementById('preview-upload-clip').getAttribute('aria-label'),'Stop preview');
+uploadAudio.currentTime=7;uploadAudio.dispatchEvent(new window.Event('timeupdate'));assert.equal(document.getElementById('preview-upload-clip').getAttribute('aria-label'),'Play selected clip');
 await click('#upload-next');assert.equal(document.getElementById('upload-details-step').hidden,false);
 
 await click('#upload-choose-emoji');
 for(let i=0;i<30&&!document.querySelector('#upload-emoji-picker .emoji-search');i++)await new Promise(setImmediate);
-await click('#upload-emoji-picker [data-emoji-choice="🦆"]');assert.equal(uploadEmoji.value,'🦆');
+await click('#upload-emoji-picker [data-emoji-choice="🦆"]');assert.equal(uploadEmoji.value,'🦆');assert.ok(document.getElementById('upload-choose-emoji').textContent.includes('🦆'));assert.equal(document.getElementById('upload-clear-emoji').hidden,false);
+await click('#upload-clear-emoji');assert.equal(uploadEmoji.value,'');assert.equal(document.getElementById('upload-clear-emoji').hidden,true);
+await click('#upload-choose-emoji');await click('#upload-emoji-picker [data-emoji-choice="🦆"]');
 uploadDescription.value='A user uploaded clip';
 const beforeUploadSwaps=calls.filter(call=>call.url==='/swap-sound').length;
 holdNextUpload=true;
@@ -658,7 +670,7 @@ assert.equal(uploadDialog.hasAttribute('open'),true);assert.equal(document.getEl
 submitUpload();await new Promise(setImmediate);
 assert.equal(uploadDialog.hasAttribute('open'),false);assert.ok(document.getElementById('upload-status').textContent.includes('My upload added'));assert.equal(uploadAudio.hidden,true);
 assert.equal(calls.filter(call=>call.url==='/swap-sound').length,beforeUploadSwaps,'upload only saves to library');
-await click('#open-sound-upload');uploadFile.files=[{name:'large.wav',size:11*1024*1024}];uploadFile.dispatchEvent(new window.Event('change'));
+await click('#open-sound-upload');uploadFile.files=[new File(['not audio'],'document.txt')];uploadFile.dispatchEvent(new window.Event('change'));assert.ok(document.getElementById('upload-error').textContent.includes('MP3, Ogg, or WAV'));assert.equal(document.getElementById('upload-file-step').hidden,false);assert.equal(document.getElementById('upload-next').disabled,true);uploadFile.files=[{name:'large.wav',size:11*1024*1024}];uploadFile.dispatchEvent(new window.Event('change'));
 assert.ok(document.getElementById('upload-error').textContent.includes('under 10 MB'));assert.equal(uploadAudio.hidden,true);
 const drop=new window.Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(drop,'dataTransfer',{value:{files:[new File(['audio'],'Dropped clip.ogg',{type:'audio/ogg'})]}});
 document.getElementById('upload-dropzone').dispatchEvent(drop);assert.equal(uploadName.value,'Dropped clip');assert.equal(document.getElementById('upload-edit-step').hidden,false);
@@ -668,10 +680,66 @@ console.log('PASS: preview-only upload dialog, file/drop preview, emoji selectio
 
 mobileToggle.checked=true;mobileToggle.dispatchEvent(new window.Event('change'));
 uploadAccount={configured:true,canUpload:false,csrf:'',user:undefined};
-await click('#open-sound-upload');assert.equal(document.getElementById('sound-upload-fields').hidden,true);assert.equal(document.getElementById('upload-discord-login').hidden,false);assert.equal(document.getElementById('save-sound-upload').hidden,true);
+await click('#open-sound-upload');assert.equal(document.getElementById('sound-upload-fields').hidden,true);assert.equal(document.getElementById('upload-step-label').hidden,true);assert.equal(document.getElementById('upload-discord-login').hidden,false);assert.equal(document.getElementById('save-sound-upload').hidden,true);
 await click('#cancel-sound-upload');
 uploadAccount={configured:true,canUpload:false,csrf:'test-csrf',user:{id:'99999',username:'not-approved'}};
-await click('#open-sound-upload');assert.ok(document.getElementById('upload-auth-status').textContent.includes('99999'));assert.equal(document.getElementById('sound-upload-fields').hidden,true);assert.equal(document.getElementById('upload-discord-logout').hidden,false);
-await click('#upload-discord-logout');assert.equal(document.getElementById('upload-discord-login').hidden,false);
+await click('#open-sound-upload');assert.equal(document.getElementById('upload-account').hidden,true);assert.equal(document.getElementById('sound-upload-fields').hidden,true);assert.equal(document.getElementById('upload-step-label').hidden,true);assert.ok(document.getElementById('upload-error').textContent.includes('allow uploads'));assert.equal(document.getElementById('upload-discord-logout'),null);
+await click('#preview-account-logout');assert.equal(document.getElementById('upload-account').hidden,false);assert.equal(document.getElementById('upload-discord-login').hidden,false);assert.equal(document.getElementById('preview-account-login').hidden,false);assert.equal(document.getElementById('preview-account-logout').hidden,true);
 await click('#cancel-sound-upload');
 console.log('PASS: trim/volume preview, guided details flow, Discord session gating, allowlist feedback, and logout');
+
+uploadAccount={configured:true,canUpload:true,csrf:'header-csrf',user:{id:'12345',username:'Header user',avatar:'abc123'}};
+await click('#open-sound-upload');
+assert.equal(document.getElementById('preview-account').hidden,false);assert.equal(document.getElementById('preview-account-login').hidden,true);
+failNextLogout=true;
+await click('#preview-account-logout');
+assert.equal(document.getElementById('preview-account').hidden,false);
+assert.ok(document.getElementById('preview-account-error').textContent.includes('Could not sign out'));
+await click('#preview-account-logout');
+assert.equal(document.getElementById('preview-account-login').hidden,false);assert.equal(document.getElementById('preview-account-logout').hidden,true);
+assert.equal(document.getElementById('sound-upload-fields').hidden,true);
+assert.equal(document.getElementById('upload-step-label').hidden,true);
+await click('#cancel-sound-upload');
+mobileToggle.checked=false;mobileToggle.dispatchEvent(new window.Event('change'));
+assert.equal(document.getElementById('preview-account').hidden,true);
+console.log('PASS: preview account header, avatar, CSRF sign-out, failure feedback, and synchronized uploader logout');
+
+uploadAccount={configured:true,canUpload:true,csrf:'menu-csrf',user:{id:'12345',username:'Menu user'}};
+mobileToggle.checked=true;mobileToggle.dispatchEvent(new window.Event('change'));
+await new Promise(resolve=>setTimeout(resolve,10));
+const accountMenu=document.getElementById('preview-account-menu'),menuToggle=document.getElementById('preview-account-menu-toggle'),accountNavigation=document.getElementById('preview-account-navigation');
+assert.equal(accountMenu.hidden,false);
+assert.equal(document.getElementById('account-analytics-link').hidden,false);
+assert.equal(document.getElementById('account-admin-link').hidden,true);
+assert.equal(document.getElementById('upload-admin-link'),null);
+assert.equal(document.getElementById('upload-analytics-link'),null);
+await click('#preview-account-menu-toggle');assert.equal(accountNavigation.hidden,false);assert.equal(menuToggle.getAttribute('aria-expanded'),'true');
+const escapeMenu=new window.Event('keydown',{bubbles:true,cancelable:true});Object.defineProperty(escapeMenu,'key',{value:'Escape'});document.dispatchEvent(escapeMenu);
+assert.equal(accountNavigation.hidden,true);assert.equal(menuToggle.getAttribute('aria-expanded'),'false');
+await click('#preview-account-menu-toggle');document.body.dispatchEvent(new window.Event('click',{bubbles:true}));assert.equal(accountNavigation.hidden,true);
+uploadAccount={configured:true,canUpload:true,isAdmin:true,csrf:'owner-csrf',user:{id:'331819178275241984',username:'lewg9'}};
+await click('#open-sound-upload');await click('#cancel-sound-upload');
+assert.equal(document.getElementById('account-admin-link').hidden,false);
+await click('#preview-account-menu-toggle');assert.equal(accountNavigation.hidden,false);
+await click('#preview-account-logout');assert.equal(accountMenu.hidden,false);assert.equal(accountNavigation.hidden,true);
+assert.equal(document.getElementById('account-analytics-link').hidden,true);assert.equal(document.getElementById('account-admin-link').hidden,true);
+console.log('PASS: account navigation pop-out, upload/admin permissions, Escape/outside dismissal, and sign-out cleanup');
+
+const sentProgressCard=document.createElement('div');sentProgressCard.id='sent-progress-test';sentProgressCard.className='sound-card';sentProgressCard.setAttribute('data-soundid','sent-progress');document.getElementById('playable-sounds').append(sentProgressCard);
+window._highlightSound('sent-progress-test','sent-progress','Test');
+const sentProgressAudio=audios.at(-1);sentProgressAudio.duration=.03;sentProgressAudio.emit('loadedmetadata');
+assert.ok(sentProgressCard.querySelector('.sound-playback-progress'));
+await new Promise(resolve=>setTimeout(resolve,50));assert.equal(sentProgressCard.querySelector('.sound-playback-progress'),null);sentProgressCard.remove();
+console.log('PASS: media-clock progress for board/library playback, stop cleanup, and estimated Discord-send progress');
+
+assert.equal(document.getElementById('mute-sounds-checkbox').closest('.sound-settings').parentElement.id,'preview-sound-settings');
+await click('#preview-account-menu-toggle');
+const menuMute=document.getElementById('mute-sounds-checkbox');menuMute.checked=true;menuMute.dispatchEvent(new window.Event('change',{bubbles:true}));
+menuMute.dispatchEvent(new window.Event('click',{bubbles:true}));assert.equal(accountNavigation.hidden,false);
+assert.equal(String(preferences.get('mute-sounds-checkbox')),'true');
+mobileToggle.checked=false;mobileToggle.dispatchEvent(new window.Event('change'));
+assert.equal(menuMute.closest('.sound-settings').parentElement.id,'sound-settings-home');assert.equal(menuMute.checked,true);
+mobileToggle.checked=true;mobileToggle.dispatchEvent(new window.Event('change'));await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(menuMute.closest('.sound-settings').parentElement.id,'preview-sound-settings');assert.equal(menuMute.checked,true);
+assert.equal(document.getElementById('preview-account-menu').hidden,false);
+console.log('PASS: gear settings work while logged out, keep toggles open, persist preferences, and restore classic layout');

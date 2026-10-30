@@ -15,6 +15,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
 )
 
 type SoundMetadata struct {
@@ -235,13 +237,13 @@ func parseEditedEmoji(value string) (string, string, error) {
 			return value, "", nil
 		}
 	}
-	if utf8.RuneCountInString(value) <= 32 {
+	if utf8.RuneCountInString(value) <= 32 && uniseg.GraphemeClusterCount(value) == 1 {
 		hasSymbol, valid := false, true
 		for _, r := range value {
 			switch {
 			case unicode.IsSymbol(r), r == '\u203c', r == '\u2049':
 				hasSymbol = true
-			case unicode.IsMark(r), r == '\u200d', r == '#', r == '*', r >= '0' && r <= '9':
+			case unicode.IsMark(r), r == '\u200d', r == '#', r == '*', r >= '0' && r <= '9', r >= '\U000E0020' && r <= '\U000E007F':
 				if r == '\u20e3' {
 					hasSymbol = true
 				}
@@ -253,7 +255,7 @@ func parseEditedEmoji(value string) (string, string, error) {
 			return "", value, nil
 		}
 	}
-	return "", "", fmt.Errorf("Use a Unicode emoji, Discord custom emoji ID, or <:name:id>; leave blank to remove")
+	return "", "", fmt.Errorf("Choose one Unicode emoji, one Discord custom emoji ID, or <:name:id>; leave blank to remove")
 }
 func (m *SoundMetadataStore) editDetails(name, description string, editEmoji bool, id, emoji string) {
 	m.mu.Lock()

@@ -59,7 +59,8 @@ The binary contains SQLite; no separate database server is needed.
 
 ## Local analytics
 
-`/analytics` returns totals and per-sound counters as JSON:
+`/analytics/data` returns totals and per-sound counters as JSON for signed-in,
+upload-allowlisted accounts:
 
 - `added`: successful Discord uploads through this app, including replacements.
 - `sent`: successful sends to Discord, once per operation even if DiscordGo retries.
@@ -229,3 +230,33 @@ longer sources, **Full audio** shows the overview, and **Fit clip** restores the
 close view. **Precise start and end** retains the sliders. Grabbers support arrow
 keys (Shift for larger steps), Home and End. Cached waveform peaks are reused for
 zooming rather than decoding the file again.
+
+## Library administration
+
+Open `/admin` and sign in with the owner's Discord account. Admin access is bound
+on the server to the owner's immutable Discord ID, independently of the upload
+allowlist. The top account menu also shows **Manage sounds** for that account.
+
+The page searches, renames, and deletes saved library sounds. Renaming updates
+both MP3/Ogg variants, descriptions, emoji, and upload attribution. Deletion
+removes library entries and archives the audio in `sounds/.admin-archive-*`.
+These actions do not edit sounds already installed on the Discord soundboard;
+historical analytics remain under their original names. Connected soundboard
+pages receive updated library and metadata events. All mutations require an
+active owner session and its CSRF token.
+
+The **Analytics** links in the top account menu and on `/admin` open `/analytics`.
+Analytics access uses the same Discord account allowlist as uploads; a valid
+OAuth session is required, and allowlist changes apply on the next request.
+It shows cumulative totals, the top eight sounds for browser plays,
+Discord sends, and Discord board additions, and a searchable, sortable table.
+Refresh the page to read the current in-memory counters. Plays include previews
+and can be reported by multiple browser clients; they are not unique listeners.
+The time-series chart records new activity in persistent hourly UTC buckets,
+with a 24-hour view and daily rollups for 7, 30, or 90 days. History starts when
+this feature is enabled; earlier cumulative totals are not backfilled. The
+current bucket is partial. Refresh to include new events.
+
+The charts page lives at `/analytics`; `/analytics/data` serves its JSON snapshot
+with the same login and upload-allowlist checks. Only the owner can use `/admin`
+to rename or delete sounds.

@@ -324,3 +324,40 @@ func TestUploadInvalidEditsAndRevokedAccess(t *testing.T) {
 		t.Fatal("revoked upload published")
 	}
 }
+
+func TestUploadRejectsDisguisedNonAudio(t *testing.T) {
+	for _, program := range []string{"ffmpeg", "ffprobe"} {
+		if _, err := exec.LookPath(program); err != nil {
+			t.Skip(program + " unavailable")
+		}
+	}
+	h := testUploadHandler(t)
+	published := false
+	h.publish = func(string, CreateSoundboardSoundRequest) { published = true }
+	for _, ext := range []string{".mp3", ".ogg", ".wav"} {
+		for _, test := range []struct {
+			name string
+			data []byte
+		}{
+			{"Text", []byte("This is a document, not audio.")},
+			{"HTML", []byte("<html><body>Not audio</body></html>")},
+			{"Fake MP3", []byte("ID3\x04\x00\x00\x00\x00\x00\x00not audio frames")},
+			{"Fake Ogg", []byte("OggS\x00invalid container")},
+			{"Truncated WAV", wavClip(.1)[:44]},
+		} {
+			t.Run(test.name+ext, func(t *testing.T) {
+				response := sendUpload(t, h, "test-user", test.name, "disguised"+ext, "", test.data)
+				if response.Code != 400 {
+					t.Fatalf("disguised file accepted: %d %s", response.Code, response.Body.String())
+				}
+			})
+		}
+	}
+	if published {
+		t.Fatal("invalid audio was published")
+	}
+	files, err := os.ReadDir(h.directory)
+	if err != nil || len(files) != 0 {
+		t.Fatal("invalid uploads left files", err)
+	}
+}

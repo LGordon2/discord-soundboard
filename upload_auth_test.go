@@ -34,7 +34,7 @@ func testUploadAuth(t *testing.T) (*uploadAuth, *atomic.Int32) {
 			if r.Header.Get("Authorization") != "Bearer oauth-access-token" {
 				t.Error("identity not authenticated")
 			}
-			w.Write([]byte(`{"id":"12345","username":"approved-user"}`))
+			w.Write([]byte(`{"id":"12345","username":"approved-user","avatar":"abc123"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -103,7 +103,7 @@ func TestDiscordUploadOAuthSessionAndAllowlist(t *testing.T) {
 		User      uploadIdentity `json:"user"`
 		CSRF      string         `json:"csrf"`
 	}
-	if json.Unmarshal(status.Body.Bytes(), &value) != nil || !value.CanUpload || value.User.ID != "12345" || value.CSRF == "" {
+	if json.Unmarshal(status.Body.Bytes(), &value) != nil || !value.CanUpload || value.User.ID != "12345" || value.User.Avatar != "abc123" || value.CSRF == "" {
 		t.Fatalf("bad status: %s", status.Body.String())
 	}
 	if strings.Contains(status.Body.String(), "oauth-access-token") || status.Header().Get("Cache-Control") != "no-store" {

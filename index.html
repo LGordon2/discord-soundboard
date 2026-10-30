@@ -15,10 +15,28 @@
 
     <div>
         <main id="sounds">
-            <label class="ui-preview-toggle">
-                <input id="ui-preview-toggle" type="checkbox" aria-controls="library-tools">
-                Preview new UI
-            </label>
+            <div class="preview-topbar">
+                <label class="ui-preview-toggle">
+                    <input id="ui-preview-toggle" type="checkbox" aria-controls="library-tools">
+                    Preview new UI
+                </label>
+                <div id="preview-account" hidden>
+                    <p id="preview-account-identity" hidden></p>
+                    <div id="preview-account-menu" hidden>
+                        <button id="preview-account-menu-toggle" type="button" aria-label="Settings" aria-expanded="false" aria-controls="preview-account-navigation" title="Settings">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 3-.6 2.4-2.1 1.2-2.4-.6-2 3.5L3.7 11v2L1.9 14.5l2 3.5 2.4-.6 2.1 1.2L9 21h6l.6-2.4 2.1-1.2 2.4.6 2-3.5-1.8-1.5v-2l1.8-1.5-2-3.5-2.4.6-2.1-1.2L15 3Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                        <div id="preview-account-navigation" role="group" aria-label="Settings" hidden>
+                            <div id="preview-sound-settings"></div>
+                            <a id="account-analytics-link" href="/analytics" hidden><span aria-hidden="true">📊</span> Analytics</a>
+                            <a id="account-admin-link" href="/admin" hidden><span aria-hidden="true">🔧</span> Manage sounds</a>
+                        </div>
+                    </div>
+                    <a id="preview-account-login" class="discord-sign-in" href="/auth/discord?next=/" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515c-.211.375-.457.88-.626 1.28a18.4 18.4 0 0 0-5.416 0 12.94 12.94 0 0 0-.636-1.28A19.74 19.74 0 0 0 3.87 4.37C.78 8.946-.057 13.408.362 17.808a19.9 19.9 0 0 0 5.993 3.03c.486-.662.917-1.36 1.285-2.095a12.9 12.9 0 0 1-2.024-.963c.17-.124.336-.254.497-.387 3.9 1.803 8.137 1.803 11.99 0 .163.133.329.263.497.387-.644.378-1.32.7-2.027.965.368.734.798 1.433 1.285 2.095a19.84 19.84 0 0 0 5.996-3.032c.49-5.101-.838-9.523-3.537-13.438ZM8.02 15.115c-1.17 0-2.13-1.074-2.13-2.388s.94-2.39 2.13-2.39c1.188 0 2.15 1.075 2.13 2.39 0 1.314-.941 2.388-2.13 2.388Zm7.96 0c-1.17 0-2.13-1.074-2.13-2.388s.94-2.39 2.13-2.39c1.188 0 2.15 1.075 2.13 2.39 0 1.314-.92 2.388-2.13 2.388Z"/></svg><span>Sign in with Discord</span></a>
+                    <button id="preview-account-logout" type="button" hidden>Sign out</button>
+                    <p id="preview-account-error" role="alert"></p>
+                </div>
+            </div>
             <div id="mobile-slot-picker" class="mobile-slot-picker" role="group" aria-label="Choose upload slot" tabindex="-1" hidden>
                 <span id="slot-picker-label" role="status"></span>
                 <button id="cancel-slot-picker" type="button">Cancel</button>
@@ -61,17 +79,19 @@
                 <div class="library-placeholder" aria-hidden="true"></div>
             </div>
             <p id="library-empty" class="library-empty" hidden>No matching sounds. Try another search or filter.</p>
-            <div class="sound-settings">
-                <label class="sound-setting">
-                    <input id="mute-sounds-checkbox" type="checkbox">
-                    <span class="switch-track" aria-hidden="true"></span>
-                    <span>Mute sounds</span>
-                </label>
-                <label class="sound-setting">
-                    <input id="play-send-sounds-checkbox" type="checkbox">
-                    <span class="switch-track" aria-hidden="true"></span>
-                    <span>Play send sounds</span>
-                </label>
+            <div id="sound-settings-home">
+                <div class="sound-settings">
+                    <label class="sound-setting">
+                        <input id="mute-sounds-checkbox" type="checkbox">
+                        <span class="switch-track" aria-hidden="true"></span>
+                        <span>Mute sounds</span>
+                    </label>
+                    <label class="sound-setting">
+                        <input id="play-send-sounds-checkbox" type="checkbox">
+                        <span class="switch-track" aria-hidden="true"></span>
+                        <span>Play send sounds</span>
+                    </label>
+                </div>
             </div>
             <div id="playsounddisabled"></div>
             <div id="addsoundscript"></div>
@@ -88,14 +108,21 @@
     </div>
     <dialog id="sound-upload" aria-labelledby="sound-upload-title">
         <form id="sound-upload-form">
-            <h2 id="sound-upload-title">Upload a sound</h2>
+            <div class="upload-dialog-header">
+                <h2 id="sound-upload-title">Upload a sound</h2>
+                <button id="cancel-sound-upload" type="button" aria-label="Close upload dialog" title="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
             <p class="details-help">Save a clip to the shared library. MP3, Ogg, or WAV up to 2 minutes and 10 MB. Select a clip up to 5 seconds, then add its details.</p>
             <div id="upload-account">
                 <p id="upload-auth-status" role="status">Checking Discord login…</p>
-                <a id="upload-discord-login" href="/auth/discord">Sign in with Discord</a>
-                <button id="upload-discord-logout" type="button" hidden>Sign out</button>
+                <a id="upload-discord-login" class="discord-sign-in" href="/auth/discord" hidden>
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515c-.211.375-.457.88-.626 1.28a18.4 18.4 0 0 0-5.416 0 12.94 12.94 0 0 0-.636-1.28A19.74 19.74 0 0 0 3.87 4.37C.78 8.946-.057 13.408.362 17.808a19.9 19.9 0 0 0 5.993 3.03c.486-.662.917-1.36 1.285-2.095a12.9 12.9 0 0 1-2.024-.963c.17-.124.336-.254.497-.387 3.9 1.803 8.137 1.803 11.99 0 .163.133.329.263.497.387-.644.378-1.32.7-2.027.965.368.734.798 1.433 1.285 2.095a19.84 19.84 0 0 0 5.996-3.032c.49-5.101-.838-9.523-3.537-13.438ZM8.02 15.115c-1.17 0-2.13-1.074-2.13-2.388s.94-2.39 2.13-2.39c1.188 0 2.15 1.075 2.13 2.39 0 1.314-.941 2.388-2.13 2.388Zm7.96 0c-1.17 0-2.13-1.074-2.13-2.388s.94-2.39 2.13-2.39c1.188 0 2.15 1.075 2.13 2.39 0 1.314-.92 2.388-2.13 2.388Z"/></svg>
+                    <span id="upload-discord-login-label">Sign in with Discord</span>
+                </a>
             </div>
-            <p id="upload-step-label" tabindex="-1" class="details-help">1. Choose audio</p>
+            <p id="upload-step-label" hidden tabindex="-1" class="details-help">1. Choose audio</p>
             <fieldset id="sound-upload-fields" hidden disabled>
                 <section id="upload-file-step">
                     <div id="upload-dropzone">
@@ -105,6 +132,11 @@
                 </section>
                 <audio id="upload-audio-preview" preload="metadata" hidden></audio>
                 <section id="upload-edit-step" hidden aria-label="Edit audio clip">
+                    <div class="upload-waveform-row">
+                        <button id="preview-upload-clip" type="button" aria-label="Play selected clip" title="Play selected clip" aria-pressed="false" disabled>
+                            <svg class="clip-play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7Z"/></svg>
+                            <svg class="clip-stop-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                        </button>
                     <div id="upload-timeline">
                         <div id="upload-waveform-viewport">
                             <canvas id="upload-waveform" width="768" height="96" aria-hidden="true"></canvas>
@@ -114,6 +146,7 @@
                                 <button id="clip-grab-end" class="clip-handle clip-handle-end" type="button" role="slider" aria-label="Clip end" aria-orientation="horizontal" disabled></button>
                             </div>
                         </div>
+                    </div>
                     </div>
                     <p id="clip-status" role="status">Choose audio to begin.</p>
                     <p class="details-help">Drag either edge to trim, or drag the middle to move the clip. Short clips zoom in automatically when you release.</p>
@@ -133,22 +166,21 @@
                     </details>
                     <label for="clip-volume">Volume <span id="clip-volume-value">100%</span></label>
                     <input id="clip-volume" type="range" min="0" max="100" step="1" value="100">
-                    <button id="preview-upload-clip" type="button" aria-pressed="false" disabled>Preview clip</button>
                 </section>
                 <section id="upload-details-step" hidden>
                     <label for="upload-name">Sound name</label>
                     <input id="upload-name" name="name" type="text" minlength="2" maxlength="32" required autocomplete="off">
                     <label for="upload-description">Description or source</label>
                     <textarea id="upload-description" name="description" maxlength="2000" rows="3"></textarea>
-                    <label for="upload-emoji">Emoji (optional)</label>
-                    <button id="upload-choose-emoji" type="button" aria-expanded="false" aria-controls="upload-emoji-picker">Choose emoji</button>
+                    <label for="upload-choose-emoji">Emoji (optional)</label>
+                    <button id="upload-choose-emoji" class="emoji-choice" type="button" aria-expanded="false" aria-controls="upload-emoji-picker">Choose emoji</button>
+                    <button id="upload-clear-emoji" type="button" hidden>Remove emoji</button>
                     <div id="upload-emoji-picker" hidden></div>
-                    <input id="upload-emoji" name="emoji" type="text" maxlength="100" autocomplete="off" placeholder="Choose or paste an emoji">
+                    <input id="upload-emoji" name="emoji" type="hidden">
                 </section>
             </fieldset>
             <p id="upload-error" role="alert"></p>
             <div class="details-actions">
-                <button id="cancel-sound-upload" type="button">Cancel</button>
                 <button id="upload-back" type="button" hidden>Back</button>
                 <button id="upload-next" type="button" disabled>Continue</button>
                 <button id="save-sound-upload" type="submit" hidden>Add to library</button>
@@ -161,12 +193,12 @@
             <p id="sound-details-name"></p>
             <label for="sound-description">Description or source</label>
             <textarea id="sound-description" maxlength="2000" rows="5" placeholder="What is this sound? Where is it from?"></textarea>
-            <label class="emoji-label" for="sound-emoji">Emoji</label>
-            <button id="choose-sound-emoji" type="button" aria-expanded="false" aria-controls="sound-emoji-picker">Choose emoji</button>
-            <button id="clear-sound-emoji" type="button">Remove emoji</button>
+            <label class="emoji-label" for="choose-sound-emoji">Emoji</label>
+            <button id="choose-sound-emoji" class="emoji-choice" type="button" aria-expanded="false" aria-controls="sound-emoji-picker">Choose emoji</button>
+            <button id="clear-sound-emoji" type="button" hidden>Remove emoji</button>
             <div id="sound-emoji-picker" hidden></div>
-            <input id="sound-emoji" type="text" maxlength="100" autocomplete="off" placeholder="😂 or <:name:123456789>" aria-describedby="sound-emoji-help">
-            <p id="sound-emoji-help" class="details-help">Choose an emoji above, or paste a Unicode emoji or Discord custom emoji ID. Shown here immediately and used on the next upload to Discord.</p>
+            <input id="sound-emoji" type="hidden">
+            <p id="sound-emoji-help" class="details-help">Choose one emoji from the picker. Shown here immediately and used on the next upload to Discord.</p>
             <p class="details-help">Saved on the server and shared with everyone using this soundboard.</p>
             <p id="sound-details-error" role="alert"></p>
             <div class="details-actions">

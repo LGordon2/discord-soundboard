@@ -40,6 +40,7 @@ func validUploadName(name string) bool {
 type audioProbe struct {
 	Format struct {
 		Duration string `json:"duration"`
+		Name     string `json:"format_name"`
 	} `json:"format"`
 	Streams []struct {
 		CodecType string `json:"codec_type"`
@@ -79,7 +80,7 @@ func parseUploadEdit(r *http.Request) (uploadEdit, error) {
 	return edit, nil
 }
 func uploadAudioDuration(ctx context.Context, filename string, limit float64) (float64, error) {
-	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-show_entries", "format=duration:stream=codec_type", "-of", "json", filename)
+	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-show_entries", "format=format_name,duration:stream=codec_type", "-of", "json", filename)
 	data, err := cmd.Output()
 	if err != nil {
 		return 0, fmt.Errorf("could not read audio; choose a valid MP3, Ogg, or WAV file")
@@ -87,6 +88,11 @@ func uploadAudioDuration(ctx context.Context, filename string, limit float64) (f
 	var probe audioProbe
 	if json.Unmarshal(data, &probe) != nil {
 		return 0, fmt.Errorf("could not read audio information")
+	}
+	switch probe.Format.Name {
+	case "mp3", "ogg", "wav":
+	default:
+		return 0, fmt.Errorf("choose an actual MP3, Ogg, or WAV audio file")
 	}
 	seconds, err := strconv.ParseFloat(probe.Format.Duration, 64)
 	if err != nil || math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds <= 0 || seconds > limit {
@@ -131,7 +137,7 @@ func convertUploadEdit(ctx context.Context, input, output string, edit uploadEdi
 	if length <= 0 || length > 5.000001 {
 		return fmt.Errorf("select a clip up to five seconds")
 	}
-	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-ss", strconv.FormatFloat(start, 'f', 6, 64), "-i", input, "-map", "0:a:0", "-vn", "-sn", "-dn", "-map_metadata", "-1", "-t", strconv.FormatFloat(length, 'f', 6, 64), "-af", "volume=" + strconv.FormatFloat(edit.Volume, 'f', 6, 64), "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2", "-f", "mp3", "-y", output}
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-xerror", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-ss", strconv.FormatFloat(start, 'f', 6, 64), "-i", input, "-map", "0:a:0", "-vn", "-sn", "-dn", "-map_metadata", "-1", "-t", strconv.FormatFloat(length, 'f', 6, 64), "-af", "volume=" + strconv.FormatFloat(edit.Volume, 'f', 6, 64), "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2", "-f", "mp3", "-y", output}
 	if err := exec.CommandContext(ctx, "ffmpeg", args...).Run(); err != nil {
 		return fmt.Errorf("audio conversion failed; try another file")
 	}

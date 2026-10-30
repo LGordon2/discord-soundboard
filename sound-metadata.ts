@@ -1,3 +1,5 @@
+import { renderEmojiSelection } from './emoji-selection';
+import { isSingleEmojiValue, singleEmojiMessage } from './single-emoji';
 type SoundMetadata = { description: string; emoji_id?: string; emoji_name?: string };
 let metadata: Record<string, SoundMetadata> = Object.create(null);
 let onUpdate = () => {};
@@ -115,6 +117,13 @@ export const initSoundMetadata = (updated: () => void) => {
     const emojiInput = document.getElementById('sound-emoji') as HTMLInputElement | null;
     const pickerButton = document.getElementById('choose-sound-emoji') as HTMLButtonElement | null;
     const pickerRoot = document.getElementById('sound-emoji-picker');
+    const clearEmoji = document.getElementById('clear-sound-emoji');
+    const syncClearEmoji = () => {
+        if (clearEmoji) clearEmoji.hidden = !emojiInput?.value.trim();
+        if (pickerButton) renderEmojiSelection(pickerButton, emojiInput?.value || '');
+    };
+    emojiInput?.addEventListener('input', syncClearEmoji);
+    emojiInput?.addEventListener('change', syncClearEmoji);
     let pickerVersion = 0;
     const hidePicker = () => {
         pickerVersion++;
@@ -133,15 +142,16 @@ export const initSoundMetadata = (updated: () => void) => {
             if (version !== pickerVersion || !dialog?.hasAttribute('open')) return;
             mountEmojiPicker(pickerRoot, customEmojiChoices(), value => {
                 emojiInput.value = value;
+                syncClearEmoji();
                 hidePicker();
                 pickerButton.focus();
             });
         } catch {
-            if (version === pickerVersion) pickerRoot.textContent = 'Could not load the emoji picker. You can still paste an emoji below.';
+            if (version === pickerVersion) pickerRoot.textContent = 'Could not load the emoji picker. Close it and try again.';
         }
     });
     document.getElementById('clear-sound-emoji')?.addEventListener('click', () => {
-        if (emojiInput && !saving) {emojiInput.value = ''; hidePicker(); emojiInput.focus();}
+        if (emojiInput && !saving) {emojiInput.value = ''; syncClearEmoji(); hidePicker(); pickerButton?.focus();}
     });
     dialog?.addEventListener('close', hidePicker);
     dialog?.addEventListener('keydown', event => {
@@ -165,6 +175,7 @@ export const initSoundMetadata = (updated: () => void) => {
         input.value = metadata[name]?.description || '';
         initialEmoji = metadata[name]?.emoji_id || metadata[name]?.emoji_name || '';
         emojiInput.value = initialEmoji;
+        syncClearEmoji();
         error.textContent = '';
         dialog.showModal();
         input.focus();
@@ -174,6 +185,7 @@ export const initSoundMetadata = (updated: () => void) => {
     form.addEventListener('submit', async event => {
         event.preventDefault();
         if (saving) return;
+        if (!isSingleEmojiValue(emojiInput.value)) {error.textContent = singleEmojiMessage;pickerButton?.focus();return;}
         saving = true;
         hidePicker();
         save.disabled = true;

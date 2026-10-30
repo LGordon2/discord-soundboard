@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "vite build && node scripts/test-client.mjs && node --experimental-strip-types scripts/test-search.mjs && node --experimental-strip-types scripts/test-clip-timeline.mjs",
+    "test": "vite build && node scripts/test-client.mjs && node --experimental-strip-types scripts/test-search.mjs && node --experimental-strip-types scripts/test-clip-timeline.mjs && node scripts/test-analytics-page.mjs && node --experimental-strip-types scripts/test-single-emoji.mjs",
     "build": "vite build",
     "test:client": "node scripts/test-client.mjs"
   },

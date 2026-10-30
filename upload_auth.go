@@ -22,6 +22,7 @@ import (
 type uploadIdentity struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
 }
 type uploadSession struct {
 	uploadIdentity
@@ -78,7 +79,7 @@ func (a *uploadAuth) session(r *http.Request) (*uploadSession, error) {
 		return nil, nil
 	}
 	var session uploadSession
-	err = a.db.QueryRow("SELECT user_id,username,csrf,expires FROM upload_sessions WHERE token_hash=? AND expires>?", uploadTokenHash(cookie.Value), a.now().Unix()).Scan(&session.ID, &session.Username, &session.CSRF, &session.Expires)
+	err = a.db.QueryRow("SELECT user_id,username,avatar,csrf,expires FROM upload_sessions WHERE token_hash=? AND expires>?", uploadTokenHash(cookie.Value), a.now().Unix()).Scan(&session.ID, &session.Username, &session.Avatar, &session.CSRF, &session.Expires)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -128,6 +129,7 @@ func (a *uploadAuth) status(w http.ResponseWriter, r *http.Request) {
 	result := map[string]any{"configured": a.configured(), "canUpload": false}
 	if session != nil {
 		result["user"] = session.uploadIdentity
+		result["isAdmin"] = a.configured() && session.ID == adminDiscordID
 		result["csrf"] = session.CSRF
 		result["canUpload"] = a.configured() && a.allowed(session.ID)
 	}
@@ -152,6 +154,11 @@ func (a *uploadAuth) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.cookie(w, "soundboard_upload_oauth_state", state, 600)
+	if next := r.URL.Query().Get("next"); next == "/" || next == "/admin" || next == "/analytics" {
+		a.cookie(w, "soundboard_upload_oauth_return", next, 600)
+	} else {
+		a.cookie(w, "soundboard_upload_oauth_return", "", -1)
+	}
 	query := url.Values{"response_type": {"code"}, "client_id": {a.clientID}, "scope": {"identify"}, "redirect_uri": {a.redirectURI}, "state": {state}}
 	http.Redirect(w, r, a.authorizeURL+"?"+query.Encode(), 302)
 }
@@ -213,7 +220,7 @@ func (a *uploadAuth) callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not save login session", 500)
 		return
 	}
-	if _, err = tx.Exec("INSERT INTO upload_sessions(token_hash,user_id,username,csrf,expires) VALUES(?,?,?,?,?)", uploadTokenHash(token), identity.ID, identity.Username, csrf, a.now().Add(7*24*time.Hour).Unix()); err != nil {
+	if _, err = tx.Exec("INSERT INTO upload_sessions(token_hash,user_id,username,avatar,csrf,expires) VALUES(?,?,?,?,?,?)", uploadTokenHash(token), identity.ID, identity.Username, identity.Avatar, csrf, a.now().Add(7*24*time.Hour).Unix()); err != nil {
 		http.Error(w, "Could not save login session", 500)
 		return
 	}
@@ -222,7 +229,12 @@ func (a *uploadAuth) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.cookie(w, "soundboard_upload_session", token, 7*24*3600)
-	http.Redirect(w, r, "/?upload_login=success", 303)
+	destination := "/?upload_login=success"
+	if next, err := r.Cookie("soundboard_upload_oauth_return"); err == nil && (next.Value == "/" || next.Value == "/admin" || next.Value == "/analytics") {
+		destination = next.Value
+	}
+	a.cookie(w, "soundboard_upload_oauth_return", "", -1)
+	http.Redirect(w, r, destination, 303)
 }
 func (a *uploadAuth) exchange(ctx context.Context, code string) (uploadIdentity, error) {
 	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {a.redirectURI}}

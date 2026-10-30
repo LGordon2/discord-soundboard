@@ -114,7 +114,7 @@ func TestAnalyticsHTTP(t *testing.T) {
 		{"POST", "/analytics/play", `{`, 400},
 		{"POST", "/analytics/play", strings.Repeat("x", 2048), 400},
 		{"GET", "/analytics/play", "", 405},
-		{"POST", "/analytics", "", 405},
+		{"POST", "/analytics/data", "", 405},
 	} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body)))
@@ -123,7 +123,7 @@ func TestAnalyticsHTTP(t *testing.T) {
 		}
 	}
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest("GET", "/analytics", nil))
+	handler.ServeHTTP(response, httptest.NewRequest("GET", "/analytics/data", nil))
 	var snapshot AnalyticsSnapshot
 	if err := json.Unmarshal(response.Body.Bytes(), &snapshot); err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ func TestAnalyticsHTTP(t *testing.T) {
 		t.Fatalf("incorrect response: %s", response.Body.String())
 	}
 	disabled := httptest.NewRecorder()
-	analyticsHandler(nil, nil).ServeHTTP(disabled, httptest.NewRequest("GET", "/analytics", nil))
+	analyticsHandler(nil, nil).ServeHTTP(disabled, httptest.NewRequest("GET", "/analytics/data", nil))
 	if disabled.Code != 503 {
 		t.Fatalf("disabled status %d", disabled.Code)
 	}

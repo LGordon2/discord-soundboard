@@ -1,3 +1,5 @@
+import { trackSoundProgress, estimateSoundProgress, stopSoundProgress } from './sound-progress';
+import { initAccountHeader } from './discord-account';
 import { initLibraryPreview, stopLibraryPreview } from './library-preview';
 import { initMobilePreview, decorateMobilePreview, refreshMobilePreview } from './mobile-preview';
 // import * as amplitude from '@amplitude/analytics-browser';
@@ -8,7 +10,6 @@ import { connectBoard } from './live-updates';
 import { initUIPreview, syncLibraryPreview, syncLibraryAvailability, recordRecentSound } from './ui-preview';
 import { initSoundMetadata, decorateSoundMetadata, refreshSoundMetadata } from './sound-metadata';
 
-const playTimeouts: Record<string, any> = {};
 (window as any)._addStats = {};
 
 const toggleState = (id: string) => {
@@ -85,24 +86,14 @@ const iconLoad = (el: any, iconType: any) => {
     el.innerHTML = iconSvg
 }
 
-const highlightSound = (el: any, audio: any, soundId: string) => {
-    if (playTimeouts[soundId]) {
-        clearTimeout(playTimeouts[soundId]);
-    }
-    el.classList.add('sound-playing');
-    const timeoutId = setTimeout(() => {
-        el.classList.remove('sound-playing');
-    }, audio.duration * 1000)
-    playTimeouts[soundId] = timeoutId;
-}
+const highlightSound = (el: HTMLElement, audio: HTMLAudioElement) => {estimateSoundProgress(el, audio.duration);};
 
 const playingAudio: Record<string, any> = {};
 let previewVersion = 0;
 const stopBoardPreviews = () => {
     previewVersion++;
     Object.values(playingAudio).forEach(audio => audio.pause());
-    Object.values(playTimeouts).forEach(clearTimeout);
-    document.querySelectorAll('#playable-sounds .sound-playing').forEach(card => card.classList.remove('sound-playing'));
+    document.querySelectorAll<HTMLElement>('#playable-sounds .sound-playing').forEach(stopSoundProgress);
 };
 
 
@@ -145,16 +136,14 @@ const playSound = (elId: any, soundId: string, sent: boolean) => {
     }
     let el = undefined;
     if (elId) {
-        el = document.querySelector('#' + elId)
+        el = document.querySelector<HTMLElement>('#' + elId)
     }
+    if (el) trackSoundProgress(el, audio);
     audio.addEventListener("canplaythrough", () => {
         if (!sent && version !== previewVersion) return;
-        if (el) {
-            highlightSound(el, audio, soundId)
-        }
         if (!muted.state) {
             if (!sent || sent && shouldPlaySendSounds.state) {
-                audio.play();
+                void audio.play().catch(() => {if(el)stopSoundProgress(el);});
             }
         }
     });
@@ -262,15 +251,14 @@ const addSoundUpdates = (hiddenSounds: string[], hasEmpty: boolean) => {
     // amplitude.track('soundboard: play sound', { soundName })
     const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
     audio.preload = 'metadata';
+    const version = previewVersion;
     let el = undefined;
     if (elId) {
-        el = document.querySelector('#' + elId);
+        el = document.querySelector<HTMLElement>('#' + elId);
     }
-    audio.addEventListener("canplaythrough", () => {
-        if (el) {
-            highlightSound(el, audio, soundId);
-        }
-    });
+    audio.addEventListener("loadedmetadata", () => {
+        if (version === previewVersion && el?.isConnected && el.getAttribute("data-soundid") === soundId) highlightSound(el, audio);
+    }, {once:true});
 };
 (window as any)._playSound = playSound;
 (window as any)._muteSounds = muteSounds;
@@ -328,7 +316,6 @@ document.addEventListener('click', async event => {
         case 'send':
             endpoint = '/send-sound';
             query.set('soundID', soundID);
-            (window as any)._highlightSound(card?.id, soundID, card?.getAttribute('data-soundname'));
             break;
         case 'save':
             endpoint = '/save-sound';
@@ -348,7 +335,10 @@ document.addEventListener('click', async event => {
     try {
         const response = await fetch(`${endpoint}?${query}`, { method });
         if (!response.ok) throw new Error('Sound action failed');
-        if (action === 'send') recordRecentSound(card?.getAttribute('data-soundname') || '');
+        if (action === 'send') {
+            recordRecentSound(card?.getAttribute('data-soundname') || '');
+            (window as any)._highlightSound(card?.id, soundID, card?.getAttribute('data-soundname'));
+        }
         document.getElementById('action-status')?.replaceChildren();
     } catch {
         showActionError();
@@ -380,6 +370,7 @@ document.getElementById('mute-sounds-checkbox')?.addEventListener('change', mute
 document.getElementById('play-send-sounds-checkbox')?.addEventListener('change', playSendSounds);
 
 initUIPreview();
+initAccountHeader();
 initLibraryPreview(recordRecentSound, () => Boolean(muted.state), stopBoardPreviews);
 initMobilePreview();
 initSoundMetadata(syncLibraryPreview);

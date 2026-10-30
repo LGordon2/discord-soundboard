@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS analytics_state (
 CREATE TABLE IF NOT EXISTS sound_counts (
  name TEXT PRIMARY KEY, added INTEGER NOT NULL DEFAULT 0 CHECK(added>=0),
  sent INTEGER NOT NULL DEFAULT 0 CHECK(sent>=0), played INTEGER NOT NULL DEFAULT 0 CHECK(played>=0));
+CREATE TABLE IF NOT EXISTS analytics_hourly (
+ hour TEXT PRIMARY KEY, added INTEGER NOT NULL DEFAULT 0 CHECK(added>=0),
+ sent INTEGER NOT NULL DEFAULT 0 CHECK(sent>=0), played INTEGER NOT NULL DEFAULT 0 CHECK(played>=0));
 CREATE TABLE IF NOT EXISTS upload_sessions (
  token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, username TEXT NOT NULL, csrf TEXT NOT NULL, expires INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS sound_uploads (
@@ -70,7 +73,7 @@ func initializeDatabase(db *sql.DB, analyticsFile, metadataFile string) error {
 	if err := db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 1 {
+	if version > 3 {
 		return fmt.Errorf("database schema %d is newer than this application", version)
 	}
 	tx, err := db.Begin()
@@ -79,6 +82,14 @@ func initializeDatabase(db *sql.DB, analyticsFile, metadataFile string) error {
 	}
 	defer tx.Rollback()
 	if _, err = tx.Exec(databaseSchema); err != nil {
+		return err
+	}
+	if version < 2 {
+		if _, err = tx.Exec("ALTER TABLE upload_sessions ADD COLUMN avatar TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec("INSERT OR IGNORE INTO app_settings(key,value) VALUES('analytics_history_since',?)", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
 	var imported string
@@ -117,7 +128,7 @@ func initializeDatabase(db *sql.DB, analyticsFile, metadataFile string) error {
 			return err
 		}
 	}
-	if _, err = tx.Exec("PRAGMA user_version=1"); err != nil {
+	if _, err = tx.Exec("PRAGMA user_version=3"); err != nil {
 		return err
 	}
 	return tx.Commit()
