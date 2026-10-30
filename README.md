@@ -141,3 +141,10 @@ Current browsers request `/ws?format=json&v=2`. In version 2, each library entry
 is `[name, extension]` (for example `["Airhorn", ".ogg"]`), avoiding repeated
 object keys across the catalog. Slot/events retain named fields. JSON clients
 without `v=2` keep the original object entries; HTML clients remain supported.
+
+The upstream Discord Gateway uses `zlib-stream` transport compression by default.
+One streaming decompressor is retained per connection; a reconnect gets a fresh
+context. `DISCORD_GATEWAY_COMPRESSION=none` restores uncompressed upstream JSON
+if needed. This setting is independent of browser WebSocket compression.
+Gateway READY/disconnect logs include compressed and decoded byte counts without
+logging credentials or payload contents.

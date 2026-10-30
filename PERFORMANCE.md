@@ -168,3 +168,28 @@ HTML responses now include `Cache-Control: no-cache, no-transform`. The
 `no-transform` directive prevents Cloudflare's automatic Web Analytics beacon
 injection while HTML still revalidates. Local SQLite analytics are unaffected.
 See https://developers.cloudflare.com/web-analytics/get-started/ .
+
+## Upstream Discord Gateway compression
+
+The Gateway URL now requests `compress=zlib-stream`. Discord's transport is a
+continuous zlib stream with shared history, not an independent compressed object
+per WebSocket message. A persistent Go zlib reader consumes binary messages across
+WebSocket boundaries; the JSON decoder yields complete events as flushed output
+arrives. Split flush markers, multiple events, and dictionary history therefore
+remain intact without repeatedly inflating the whole connection history.
+Each reconnect allocates its own decompressor. Identify's `compress:false` is
+intentional: that field controls a separate per-payload compression mode.
+See https://github.com/discord/discord-api-docs/blob/main/developers/events/gateway.mdx .
+
+Compressed WebSocket messages and decompressed event reads are limited to 16 MiB.
+Corrupt/truncated streams fail the connection and use the existing reconnect path.
+`DISCORD_GATEWAY_COMPRESSION=none` disables upstream compression for rollback;
+the default and explicit `zlib-stream` enable it. READY/disconnect log counters
+report application-level compressed/decoded bytes, excluding TLS/WS overhead.
+They may include decoder lookahead and are not per-event wire measurements.
+
+Connection cleanup closes the cancellation channel instead of sending on it,
+so early failures cannot deadlock before the writer goroutine starts. Receivers
+also stop cleanly when cancellation occurs while their delivery channel is full.
+The Gateway writer now uses local error variables instead of sharing one with
+the connection setup path.

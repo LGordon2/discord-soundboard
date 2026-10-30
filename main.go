@@ -716,25 +716,35 @@ func main() {
 
 	// Returns true on critical error
 	connectDiscordWebsocket := func() (error, bool) {
-		conn, _, err := websocket.DefaultDialer.Dial("wss://gateway.discord.gg/?encoding=json&v=9", http.Header{})
+		gatewayURL, compressed, err := discordGatewayURL(os.Getenv("DISCORD_GATEWAY_COMPRESSION"))
+		if err != nil {
+			return err, true
+		}
+		conn, _, err := websocket.DefaultDialer.Dial(gatewayURL, http.Header{})
 		if err != nil {
 			return err, true
 		}
 		done := make(chan struct{})
 		defer func() {
-			done <- struct{}{}
+			close(done)
 			conn.Close()
 		}()
 
 		recvMsgChan := make(chan DiscordMessage, 100)
 
 		go func() {
+			reader := newDiscordGatewayReader(conn, compressed)
+			defer reader.Close()
+			defer close(recvMsgChan)
+			defer func() {
+				wire, decoded := reader.Stats()
+				log.Printf("[discord-websocket] disconnected transport_compression=%t compressed_bytes=%d decoded_bytes=%d", compressed, wire, decoded)
+			}()
 			for {
 				var msg DiscordMessage
-				err := conn.ReadJSON(&msg)
+				err := reader.ReadJSON(&msg)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[discord-websocket] read error occurred shutting down: %v", err)
-					close(recvMsgChan)
 					return
 				}
 
@@ -742,22 +752,30 @@ func main() {
 				case map[string]interface{}:
 					data, err := json.Marshal(msg.Data)
 					if err != nil {
-						close(recvMsgChan)
 						return
 					}
 					var dmd DiscordMessageData
 					err = json.Unmarshal(data, &dmd)
 					if err != nil {
-						close(recvMsgChan)
 						return
 					}
 					msg.Data = &dmd
 				}
 
-				recvMsgChan <- msg
+				if msg.Type != nil && *msg.Type == "READY" {
+					wire, decoded := reader.Stats()
+					log.Printf("[discord-websocket] READY transport_compression=%t compressed_bytes=%d decoded_bytes=%d", compressed, wire, decoded)
+				}
+				select {
+				case recvMsgChan <- msg:
+				case <-done:
+					return
+				}
 			}
 		}()
 
+		// Transport compression is negotiated in the URL. Identify compress=false
+		// intentionally leaves the separate per-payload compression mode disabled.
 		err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":2,"d":{"token":"`+authToken+`","capabilities":30717,"properties":{"os":"Windows","browser":"Chrome","device":"","system_locale":"en-US","browser_user_agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36","browser_version":"125.0.0.0","os_version":"10","referrer":"https://www.google.com/","referring_domain":"www.google.com","search_engine":"google","referrer_current":"","referring_domain_current":"","release_channel":"stable","client_build_number":301920,"client_event_source":null,"design_id":0},"presence":{"status":"unknown","since":0,"activities":[],"afk":false},"compress":false,"client_state":{"guild_versions":{}}}}`))
 		if err != nil {
 			return err, true
@@ -778,13 +796,13 @@ func main() {
 				case <-done:
 					return
 				case msg := <-msgChan:
-					err = conn.WriteMessage(websocket.TextMessage, msg)
+					err := conn.WriteMessage(websocket.TextMessage, msg)
 					if err != nil {
 						fmt.Fprintf(os.Stderr, "[error] writing message to discord ws %v\n", err)
 					}
 					ticker.Reset(10 * time.Second)
 				case <-ticker.C:
-					err = conn.WriteMessage(websocket.TextMessage, []byte(`{"op":1,"d":4}`))
+					err := conn.WriteMessage(websocket.TextMessage, []byte(`{"op":1,"d":4}`))
 					if err != nil {
 						return
 					}
