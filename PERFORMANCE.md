@@ -90,3 +90,35 @@ replacement, metadata/deletion deltas, repeated snapshots, and duplicate IDs.
 Floating notifications now include an accessible close button. Timed success
 messages show a shrinking countdown bar over their 3.5-second lifetime; errors
 remain until dismissed or replaced.
+
+## Delivery and layout stability
+
+A public-site check found an initial 160,633-byte WebSocket snapshot containing
+596 library cards, with no compression negotiated. HTTP assets were already
+compressed by the proxy. The application now negotiates permessage-deflate at
+BestSpeed for browser WebSockets. A 600-card regression test transfers 195,548
+bytes uncompressed versus 4,600 bytes compressed, including the upgrade handshake
+(97.6% smaller). Clients that do not negotiate compression continue to work.
+
+Hashed assets receive `public, max-age=31536000, immutable`; HTML revalidates with
+`no-cache` so deployments load their new asset URLs. Missing files are not cached
+immutably, and range requests retain normal FileServer behavior.
+
+Automatic playback notifications now return before constructing Audio objects
+when the browser has autoplay off or is muted. Manual preview behavior remains.
+Send-button highlights preload metadata rather than requesting full audio.
+Only voice events that change the shared user's channel membership refresh the
+board, and identical soundboard snapshots no longer broadcast unchanged cards.
+
+The supplied Lighthouse report had FCP/LCP of 0.5 s, zero blocking time, and CLS
+of 0.498. Layout stability is therefore the primary target, not further minifying
+extension scripts. The HTML reserves the board and initial library space, restores
+preview layout before paint, and suppresses the empty-library message while data
+is loading. The initial board/library arrive in one atomic DOM update. Preview
+board cards reserve description space; basic doctype, language, main landmark,
+meta description, and per-sound download labels are present. A fresh Lighthouse
+run without browser extensions is needed to measure the resulting score.
+
+Cloudflare's injected analytics beacon and browser-extension scripts shown in the
+report are outside the repository's bundle. Cloudflare Web Analytics can be
+disabled separately if only the local analytics are desired.

@@ -104,3 +104,9 @@ Unicode/custom emoji are captured from Discord snapshots, retained when a sound
 leaves the board, and reused during re-upload. Previously archived sounds without
 recorded metadata cannot have their original emoji inferred. If Discord explicitly
 rejects a stored emoji, the upload retries once without it to restore the audio.
+
+Production delivery uses compressed WebSocket snapshots and immutable caching for
+hashed assets. HTML revalidates on refresh. Initial board/library placeholders
+reserve layout space until the complete snapshot arrives; preview cards reserve
+room for their description text. Automatic local echoes do not load audio when
+muted or when “Play send sounds” is off.

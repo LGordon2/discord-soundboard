@@ -1,8 +1,11 @@
-<html>
+<!doctype html>
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Browse, preview, and switch sounds on the shared Discord soundboard.">
+    <script>try{if(localStorage.getItem("soundboard-ui-preview")==="true")document.documentElement.classList.add("ui-preview")}catch{}</script>
     <link href="index.css" rel="stylesheet" />
     <title>Discord Soundboard</title>
     <link rel="shortcut icon" href="/headset.png" type="image/x-icon">
@@ -11,12 +14,21 @@
 <body>
 
     <div>
-        <div id="sounds">
+        <main id="sounds">
             <label class="ui-preview-toggle">
                 <input id="ui-preview-toggle" type="checkbox" aria-controls="library-tools">
                 Preview new UI
             </label>
-            <div id="playable-sounds"></div>
+            <div id="playable-sounds" role="region" aria-busy="true" aria-label="Uploaded soundboard">
+                <div id="soundboard-0" class="sound-card card-placeholder" aria-hidden="true"></div>
+                <div id="soundboard-1" class="sound-card card-placeholder" aria-hidden="true"></div>
+                <div id="soundboard-2" class="sound-card card-placeholder" aria-hidden="true"></div>
+                <div id="soundboard-3" class="sound-card card-placeholder" aria-hidden="true"></div>
+                <div id="soundboard-4" class="sound-card card-placeholder" aria-hidden="true"></div>
+                <div id="soundboard-5" class="sound-card card-placeholder" aria-hidden="true"></div>
+                <div id="soundboard-6" class="sound-card card-placeholder" aria-hidden="true"></div>
+                <div id="soundboard-7" class="sound-card card-placeholder" aria-hidden="true"></div>
+            </div>
             <section id="library-tools" class="library-tools" aria-label="Sound library tools" hidden>
                 <label class="library-search-label" for="library-search">Search sounds</label>
                 <input id="library-search" type="search" placeholder="Search sounds…" autocomplete="off" maxlength="120">
@@ -27,7 +39,20 @@
                 </div>
                 <span id="library-count" role="status"></span>
             </section>
-            <div id="storedsounds"></div>
+            <div id="storedsounds" role="region" aria-busy="true" aria-label="Sound library">
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+                <div class="library-placeholder" aria-hidden="true"></div>
+            </div>
             <p id="library-empty" class="library-empty" hidden>No matching sounds. Try another search or filter.</p>
             <div class="sound-settings">
                 <label class="sound-setting">
@@ -52,7 +77,7 @@
                 </svg>
                 <div class="viewer-total"><span id="user-count"></span></div>
             </div>
-        </div>
+        </main>
     </div>
     <dialog id="sound-details" aria-labelledby="sound-details-title">
         <form id="sound-details-form">

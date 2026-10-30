@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"reflect"
+	"sync/atomic"
 	"testing"
 )
 
@@ -57,5 +58,26 @@ func TestSoundStateIgnoresDuplicateIDs(t *testing.T) {
 	next, updates := reconcileSounds(previous, []SoundboardSound{sound, sound, {}})
 	if next[0] != sound || len(updates) != 1 || next[1] != (SoundboardSound{}) {
 		t.Fatalf("duplicate slots: %+v", next)
+	}
+}
+
+func TestVoiceEventsRefreshOnlyWhenSharedUserMembershipChanges(t *testing.T) {
+	var current atomic.Bool
+	for _, tc := range []struct {
+		user, guild, channel string
+		changed, want        bool
+	}{
+		{"other", "server", "voice", false, false},
+		{"self", "other", "voice", false, false},
+		{"self", "server", "voice", true, true},
+		{"other", "server", "", false, true},
+		{"self", "server", "voice", false, true},
+		{"self", "server", "elsewhere", true, false},
+		{"self", "server", "", false, false},
+	} {
+		changed := applyVoiceStateUpdate(&current, DiscordMessageData{UserID: tc.user, GuildID: tc.guild, ChannelID: tc.channel}, "self", "server", "voice")
+		if changed != tc.changed || current.Load() != tc.want {
+			t.Fatalf("event=%+v changed=%v state=%v", tc, changed, current.Load())
+		}
 	}
 }

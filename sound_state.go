@@ -1,5 +1,7 @@
 package main
 
+import "sync/atomic"
+
 // Reconcile a complete Discord snapshot before assigning new sounds. Slots
 // occupied by removed IDs are available even if no delete-only snapshot arrived.
 func reconcileSounds(previous [soundboardSoundCount]SoundboardSound, incoming []SoundboardSound) ([soundboardSoundCount]SoundboardSound, []SoundboardSoundWithOrdinal) {
@@ -38,4 +40,14 @@ func reconcileSounds(previous [soundboardSoundCount]SoundboardSound, incoming []
 		}
 	}
 	return next, updates
+}
+
+// Other members moving, self-muted events, and repeated notifications cannot
+// change these controls. Avoid rebuilding the board for those events.
+func applyVoiceStateUpdate(current *atomic.Bool, event DiscordMessageData, selfID, serverID, targetChannelID string) bool {
+	if event.UserID != selfID || event.GuildID != serverID {
+		return false
+	}
+	next := event.ChannelID == targetChannelID
+	return current.Swap(next) != next
 }

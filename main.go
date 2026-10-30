@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/flate"
 	"fmt"
 	htmlEscape "html"
 	"io"
@@ -85,8 +86,9 @@ const channelID = "284709094588284930" // general channel
 const soundboardSoundCount = 8
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  32 * 1024,
-	WriteBufferSize: 32 * 1024,
+	ReadBufferSize:    32 * 1024,
+	WriteBufferSize:   32 * 1024,
+	EnableCompression: true,
 } // use default options
 
 func deleteButton(soundId, guildId, username, avatarCDN string, disabled bool) string {
@@ -258,8 +260,11 @@ func main() {
 
 	soundUpdates := make(chan []SoundboardSoundWithOrdinal, 100)
 	clients := make(map[*websocket.Conn]chan []byte)
-	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal) bytes.Buffer {
+	latestSoundUpdate := func(newSounds []SoundboardSoundWithOrdinal, wholeBoard bool) bytes.Buffer {
 		var buf bytes.Buffer
+		if wholeBoard {
+			buf.WriteString(`<div id="playable-sounds" role="region" aria-label="Uploaded soundboard">`)
+		}
 		// write updates for new sounds
 		for _, sound := range newSounds {
 			if sound.SoundboardSound == (SoundboardSound{}) {
@@ -273,6 +278,9 @@ func main() {
 			buf.WriteString(soundCardComponent(sound.ordinal, sound.ID, sound.Name, userIsInChannel.Load(), !cannotSave, !disabled, deleteButton(sound.ID, guildID, userInfo.Username, avatarCDN, disabled)))
 		}
 
+		if wholeBoard {
+			buf.WriteString("</div>")
+		}
 		hasEmpty := false
 		hiddenSounds := make([]string, 0)
 		// This is used later to prune sounds that can be added or disables adding new sounds.
@@ -295,7 +303,7 @@ func main() {
 		return minifiedBuf
 	}
 	updateStoredSounds := func(soundsWithOrdinal []SoundboardSoundWithOrdinal) *bytes.Buffer {
-		var buf bytes.Buffer = latestSoundUpdate(soundsWithOrdinal)
+		var buf bytes.Buffer = latestSoundUpdate(soundsWithOrdinal, true)
 		soundMap := make(map[string]bool)
 		hasEmpty := false
 		// This is used later to prune sounds that can be added or disables adding new sounds.
@@ -310,7 +318,7 @@ func main() {
 		soundsMu.RUnlock()
 		_ = hasEmpty
 
-		buf.WriteString("<div id=\"storedsounds\">")
+		buf.WriteString("<div id=\"storedsounds\" role=\"region\" aria-label=\"Sound library\">")
 		for _, storedSound := range storedSounds {
 			ext := filepath.Ext(storedSound)
 			storedSoundNoExt := strings.TrimSuffix(storedSound, ext)
@@ -328,7 +336,7 @@ func main() {
 
 	go func() {
 		for newSounds := range soundUpdates {
-			buf := latestSoundUpdate(newSounds)
+			buf := latestSoundUpdate(newSounds, false)
 			msgUpdates <- buf.Bytes()
 		}
 	}()
@@ -457,6 +465,7 @@ func main() {
 			return
 		}
 		defer c.Close()
+		c.SetCompressionLevel(flate.BestSpeed)
 		soundChan := make(chan []byte, 100)
 		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
 		soundsMu.RLock()
@@ -494,14 +503,8 @@ func main() {
 				}
 			}
 		}()
-		var buf bytes.Buffer
-		buf.WriteString("<div id=\"playable-sounds\">")
-		for i := 0; i < soundboardSoundCount; i++ {
-			buf.WriteString(fmt.Sprintf("<div id=\"soundboard-%d\"></div>", i))
-		}
-		buf.WriteString("</div>")
-		soundChan <- buf.Bytes()
-
+		// One complete snapshot preserves the reserved layout and avoids an
+		// intermediate empty board or per-card replacement work on connection.
 		soundChan <- updateStoredSounds(soundsWithOrdinal).Bytes()
 
 		mu.Lock()
@@ -530,6 +533,7 @@ func main() {
 
 		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", clientCount))
 	})
+	staticFiles := staticHandler("./dist")
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
 
@@ -578,7 +582,7 @@ func main() {
 			return
 		}
 
-		http.FileServer(http.Dir("./dist")).ServeHTTP(w, r)
+		staticFiles.ServeHTTP(w, r)
 	})
 	http.HandleFunc("/swap-sound", func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -847,7 +851,9 @@ func main() {
 				sounds = newSounds
 				soundsMu.Unlock()
 				// Publish readiness before optional CDN downloads and library rescans.
-				soundUpdates <- newUpdates
+				if len(newUpdates) > 0 {
+					soundUpdates <- newUpdates
+				}
 				if metadataChanged {
 					publishMetadata()
 				}
@@ -864,20 +870,20 @@ func main() {
 				json.NewEncoder(os.Stdout).Encode(recvMsg)
 				fetchSoundboardSounds()
 			} else if *recvMsg.Type == "VOICE_STATE_UPDATE" {
-				updateUserID := dmd.UserID
-				updateGuildID := dmd.GuildID
-				if updateUserID == discordClient.userID && guildID == updateGuildID {
-					updateChannelID := dmd.ChannelID
-					userIsInChannel.Store(updateChannelID == channelID)
+				if !applyVoiceStateUpdate(&userIsInChannel, *dmd, discordClient.userID, guildID, channelID) {
+					continue
 				}
-				// just force updates on all the sounds!
+
+				// Refresh permission-sensitive controls only when our voice membership changes.
 				updates := make([]SoundboardSoundWithOrdinal, 0)
+				soundsMu.RLock()
 				for i, sound := range sounds {
 					updates = append(updates, SoundboardSoundWithOrdinal{
 						ordinal:         i,
 						SoundboardSound: sound,
 					})
 				}
+				soundsMu.RUnlock()
 				soundUpdates <- updates
 			}
 		}

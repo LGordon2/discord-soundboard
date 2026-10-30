@@ -62,10 +62,11 @@ export const syncLibraryPreview = () => {
     });
     decorateSoundMetadata(document);
     const count = document.getElementById('library-count');
-    const text = `${visible} of ${available} available sounds`;
+    const loading = document.getElementById('storedsounds')?.getAttribute('aria-busy') === 'true';
+    const text = loading ? 'Loading sounds…' : `${visible} of ${available} available sounds`;
     if (count && count.textContent !== text) count.textContent = text;
     const empty = document.getElementById('library-empty');
-    if (empty) empty.hidden = !enabled || visible > 0;
+    if (empty) empty.hidden = !enabled || loading || visible > 0;
 };
 
 export const recordRecentSound = (name: string) => {
@@ -82,6 +83,7 @@ export const initUIPreview = () => {
     enabled = read(keys.enabled) === 'true';
     toggle.checked = enabled;
     const apply = () => {
+        document.documentElement.classList.toggle('ui-preview', enabled);
         document.body.classList.toggle('ui-preview', enabled);
         tools.hidden = !enabled;
         syncLibraryPreview();

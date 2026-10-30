@@ -108,6 +108,7 @@ const playingAudio: Record<string, any> = {};
  */
 const playSound = (elId: any, soundId: string, sent: boolean) => {
     sent = sent === undefined ? false : sent
+    if (sent && (muted.state || !shouldPlaySendSounds.state)) return;
     if (playingAudio[soundId]) {
         playingAudio[soundId].pause();
     }
@@ -190,6 +191,7 @@ const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
 (window as any)._highlightSound = (elId: any, soundId: string, _soundName: string) => {
     // amplitude.track('soundboard: play sound', { soundName })
     const audio = new Audio(`https://cdn.discordapp.com/soundboard-sounds/${soundId}`);
+    audio.preload = 'metadata';
     let el = undefined;
     if (elId) {
         el = document.querySelector('#' + elId);

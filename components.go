@@ -38,7 +38,7 @@ const soundCardComponentTmplRaw = `
         <button data-action="save" data-icon="save" class="sound-control sound-save"
                 {{if not .canSave}}disabled="true"{{end}}></button>
         <a class="sound-control sound-download" href="https://cdn.discordapp.com/soundboard-sounds/{{.soundId}}"
-           data-icon="download" aria-label="Download sound"></a>
+           data-icon="download" aria-label="Download {{.soundName}}"></a>
     </div>
     <div class="sound-actions">
         <button data-action="preview" data-icon="headphones" class="sound-control"></button>
