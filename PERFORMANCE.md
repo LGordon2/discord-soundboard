@@ -128,3 +128,11 @@ same 160,858-byte decoded snapshot used 164,800 bytes without compression and
 14,613 bytes with it (91.1% less, including TLS/upgrade overhead). Public JS/CSS
 responses also confirmed the one-year immutable cache policy. These are transfer
 measurements; a replacement Lighthouse run is still needed to quantify CLS.
+
+Uploaded preview cards now use compact height when the description is empty and
+reserve extra height only for a real description. The initial HTML includes small
+per-slot sizing hints derived from the current board/metadata caches; these are
+removed after the browser has both snapshots. This avoids making every card tall
+while still reserving the known description heights before paint. Generated HTML
+uses a content-derived ETag so a description being added/cleared invalidates its
+initial layout hint correctly.

@@ -533,7 +533,17 @@ func main() {
 
 		msgUpdates <- []byte(fmt.Sprintf("<span id=user-count>%d</span>", clientCount))
 	})
-	staticFiles := staticHandler("./dist")
+	staticFiles := staticHandler("./dist", func() [soundboardSoundCount]bool {
+		soundsMu.RLock()
+		current := sounds
+		soundsMu.RUnlock()
+		details := metadata.Snapshot()
+		var described [soundboardSoundCount]bool
+		for slot, sound := range current {
+			described[slot] = strings.TrimSpace(details[sound.Name].Description) != ""
+		}
+		return described
+	})
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		code := r.URL.Query().Get("code")
 

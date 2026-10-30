@@ -239,7 +239,8 @@ button[aria-busy="true"] { opacity: 0.5; cursor: progress; }
     .sound-details-button { color: #38bdf8; }
 }
 
-.ui-preview .sound-card { display: flex; flex-direction: column; height: 9rem; min-height: 9rem; }
+.ui-preview .sound-card { display: flex; flex-direction: column; height: 6rem; min-height: 6rem; }
+.ui-preview .sound-card.has-description { height: 9rem; min-height: 9rem; }
 .ui-preview .sound-card .sound-actions { margin-top: auto; min-height: 2.5rem; }
 .sound-empty { flex: 1; }
 .ui-preview .sound-card .sound-title { margin-bottom: 0.25rem; }

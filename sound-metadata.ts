@@ -2,6 +2,7 @@ type SoundMetadata = { description: string; emoji_id?: string; emoji_name?: stri
 let metadata: Record<string, SoundMetadata> = {};
 let onUpdate = () => {};
 let requestVersion = 0;
+let metadataReady = false;
 const decoratedCards = new WeakMap<HTMLElement, { enabled: boolean; name: string; entry: SoundMetadata | undefined }>();
 
 export const getSoundMetadata = (name: string): SoundMetadata | undefined => metadata[name];
@@ -18,6 +19,7 @@ const applyMetadata = (value: unknown) => {
         };
     }
     metadata = next;
+    metadataReady = true;
     decorateSoundMetadata(document);
     onUpdate();
 };
@@ -31,6 +33,18 @@ export const refreshSoundMetadata = async () => {
             if (version === requestVersion) applyMetadata(values);
         }
     } catch { /* Sound controls remain usable when details are unavailable. */ }
+    finally {
+        if (version === requestVersion) {
+            metadataReady = true;
+            releaseInitialLayout();
+        }
+    }
+};
+
+const releaseInitialLayout = () => {
+    if (metadataReady && document.getElementById('playable-sounds')?.getAttribute('aria-busy') !== 'true') {
+        document.getElementById('initial-card-layout')?.remove();
+    }
 };
 
 export const decorateSoundMetadata = (root: ParentNode) => {
@@ -41,6 +55,8 @@ export const decorateSoundMetadata = (root: ParentNode) => {
         const name = card.getAttribute('data-soundname') || '';
         if (!name) continue;
         const entry = metadata[name];
+        const descriptionText = entry?.description.trim() || '';
+        card.classList.toggle('has-description', enabled && descriptionText.length > 0);
         const previous = decoratedCards.get(card);
         if (previous?.enabled === enabled && previous.name === name && previous.entry === entry) continue;
         decoratedCards.set(card, { enabled, name, entry });
@@ -58,10 +74,10 @@ export const decorateSoundMetadata = (root: ParentNode) => {
         edit.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-9h.01"/></svg>';
         header.append(edit);
         card.removeAttribute('title');
-        if (entry?.description) {
+        if (descriptionText) {
             const description = document.createElement('p');
             description.className = 'sound-description';
-            description.textContent = entry.description;
+            description.textContent = descriptionText;
             if (card.classList.contains('add-sound-component')) card.append(description);
             else header.after(description);
         }
@@ -79,6 +95,7 @@ export const decorateSoundMetadata = (root: ParentNode) => {
             heading.prepend(emoji);
         }
     }
+    releaseInitialLayout();
 };
 
 export const initSoundMetadata = (updated: () => void) => {

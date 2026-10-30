@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -50,5 +51,37 @@ func TestStaticCachePolicy(t *testing.T) {
 	response.Body.Close()
 	if response.StatusCode != 206 || string(body) != "console" {
 		t.Fatalf("range serving broke: %d %q", response.StatusCode, body)
+	}
+}
+
+func TestInitialDescriptionLayoutAndConditionalRevalidation(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte(`<!doctype html><html><head></head><body>Board</body></html>`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var described [soundboardSoundCount]bool
+	described[2] = true
+	handler := staticHandler(root, func() [soundboardSoundCount]bool { return described })
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequest("GET", "/", nil))
+	if !strings.Contains(first.Body.String(), "#soundboard-2{height:9rem") || strings.Contains(first.Body.String(), "#soundboard-0{") {
+		t.Fatalf("wrong layout hint: %s", first.Body.String())
+	}
+	etag := first.Header().Get("ETag")
+	if etag == "" {
+		t.Fatal("generated page lacks a validator")
+	}
+	request := httptest.NewRequest("GET", "/", nil)
+	request.Header.Set("If-None-Match", etag)
+	same := httptest.NewRecorder()
+	handler.ServeHTTP(same, request)
+	if same.Code != http.StatusNotModified {
+		t.Fatalf("unchanged layout: %d", same.Code)
+	}
+	described[2] = false
+	changed := httptest.NewRecorder()
+	handler.ServeHTTP(changed, request)
+	if changed.Code != http.StatusOK || changed.Header().Get("ETag") == etag || strings.Contains(changed.Body.String(), "initial-card-layout") {
+		t.Fatalf("stale layout cached: %d %s", changed.Code, changed.Body.String())
 	}
 }
