@@ -54,7 +54,7 @@ globalThis.fetch=async(url,options)=>{
 };
 const bundle=html.match(/src="\/assets\/([^\"]+\.js)"/)[1];
 await import(pathToFileURL(join(dist, 'assets', bundle)).href);
-assert.equal(socket.url,'wss://discord-soundboard.lewgordon.com/ws?format=json');
+assert.equal(socket.url,'wss://discord-soundboard.lewgordon.com/ws?format=json&v=2');
 assert.ok(document.getElementById('initial-card-layout'),'keep initial sizing until board data arrives');
 assert.equal(document.querySelectorAll('#playable-sounds .card-placeholder').length,8);
 assert.equal(document.getElementById('storedsounds').getAttribute('aria-busy'),'true');
@@ -336,3 +336,17 @@ wire({type:'board',slots:[],hidden:[],hasEmpty:true});
 assert.equal(document.getElementById('library-count').textContent,'3 of 3 available sounds');
 assert.equal(document.querySelectorAll('#storedsounds .hidden').length,0);
 console.log('PASS: targeted availability/loading updates avoid full library scans; replacement and file variants retain correct counts');
+
+wire({type:'board',slots:[],hidden:['Tuple & <sound>'],hasEmpty:true,library:[['Tuple & <sound>','.ogg'],['Tuple & <sound>','.mp3'],['Unicode 😂 "quote"','.ogg']]});
+assert.equal(document.querySelectorAll('#storedsounds .add-sound-component').length,3);
+assert.equal(document.querySelector('#storedsounds .library-title').textContent,'Tuple & <sound>');
+assert.equal(document.querySelectorAll('#storedsounds .hidden').length,2);
+assert.equal(document.getElementById('library-count').textContent,'1 of 1 available sounds');
+wire({type:'board',slots:[],hidden:[],hasEmpty:true});
+assert.equal(document.getElementById('library-count').textContent,'3 of 3 available sounds');
+assert.equal(document.querySelectorAll('#storedsounds [data-soundext=".mp3"]').length,1);
+assert.equal(document.querySelectorAll('#storedsounds sound').length,0);
+wire({type:'board',slots:[],hasEmpty:true,library:[]});
+assert.equal(document.querySelectorAll('#storedsounds .add-sound-component').length,0);
+assert.equal(document.getElementById('library-count').textContent,'0 of 0 available sounds');
+console.log('PASS: tuple library snapshots, escaping, Unicode, format variants, empty catalogs, and legacy object compatibility');

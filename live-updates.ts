@@ -68,6 +68,7 @@ export const connectBoard = (hooks: UpdateHooks) => {
         status.textContent = 'Connecting to soundboard…';
         const url = new URL('/ws', window.location.href);
         url.searchParams.set('format', 'json');
+        url.searchParams.set('v', '2');
         url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
         const connection = new WebSocket(url);
         socket = connection;

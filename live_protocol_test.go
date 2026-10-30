@@ -63,3 +63,53 @@ func TestLiveProtocolAtomicBatchAndEscaping(t *testing.T) {
 		}
 	}
 }
+
+func TestTupleLibraryProtocolCompatibility(t *testing.T) {
+	files := []liveFile{{Name: `Quote " & <sound> 😂`, Ext: ".ogg"}, {Name: "Variant", Ext: ".mp3"}}
+	original := liveFrame(liveEvent{Type: "board", Full: true, Library: &files, Slots: []liveSlot{{Slot: 0, CanRemove: true}}})
+	loading := switchStateFrame(SharedSwitchSnapshot{Epoch: "test", Version: 1, Pending: []SharedSwitch{{Slot: 0, Name: "Variant"}}})
+	batch := append(append([]byte{}, original...), loading...)
+	packed := compactLiveFrame(batch)
+	lines := bytes.Split(bytes.TrimSpace(packed), []byte{'\n'})
+	if len(lines) != 2 || !bytes.Equal(lines[1], bytes.TrimSpace(loading)) {
+		t.Fatal("loading state changed or lost")
+	}
+	var event struct {
+		Library [][2]string `json:"library"`
+		Slots   []liveSlot  `json:"slots"`
+		Full    bool        `json:"full"`
+	}
+	if err := json.Unmarshal(lines[0], &event); err != nil {
+		t.Fatal(err)
+	}
+	if len(event.Library) != 2 || event.Library[0] != [2]string{files[0].Name, files[0].Ext} || event.Library[1] != [2]string{files[1].Name, files[1].Ext} || !event.Full || len(event.Slots) != 1 {
+		t.Fatalf("tuple conversion lost data: %+v", event)
+	}
+	var old liveEvent
+	if err := json.Unmarshal(original, &old); err != nil || (*old.Library)[0] != files[0] {
+		t.Fatal("v1 object format changed")
+	}
+	if !bytes.Contains(legacyLiveFrame(batch), []byte(`class="add-sound-component`)) {
+		t.Fatal("HTML compatibility lost")
+	}
+	if !bytes.Equal(compactLiveFrame(loading), loading) {
+		t.Fatal("small live events should be untouched")
+	}
+	empty := []liveFile{}
+	emptyFrame := compactLiveFrame(liveFrame(liveEvent{Type: "board", Library: &empty}))
+	if !bytes.Contains(emptyFrame, []byte(`"library":[]`)) {
+		t.Fatal("empty snapshot must clear old library")
+	}
+}
+func TestTupleLibrarySize(t *testing.T) {
+	files := make([]liveFile, 0, 596)
+	for i := 0; i < 596; i++ {
+		files = append(files, liveFile{Name: fmt.Sprintf("Sound %d & quote", i), Ext: ".ogg"})
+	}
+	object := liveFrame(liveEvent{Type: "board", Full: true, Library: &files})
+	tuples := compactLiveFrame(object)
+	if len(tuples) >= len(object) {
+		t.Fatal("tuples did not reduce decoded size")
+	}
+	t.Logf("596-entry library: objects %d bytes (%d deflated); tuples %d bytes (%d deflated)", len(object), compressedSize(object), len(tuples), compressedSize(tuples))
+}

@@ -136,3 +136,8 @@ Cloudflare's automatic analytics beacon is suppressed by the HTML response's
 `no-transform` policy. Added/sent/played counters continue to use local SQLite.
 Correlated switching diagnostics are available in the service journal; see
 [PERFORMANCE.md](PERFORMANCE.md) for stages, interpretation, and the log command.
+
+Current browsers request `/ws?format=json&v=2`. In version 2, each library entry
+is `[name, extension]` (for example `["Airhorn", ".ogg"]`), avoiding repeated
+object keys across the catalog. Slot/events retain named fields. JSON clients
+without `v=2` keep the original object entries; HTML clients remain supported.

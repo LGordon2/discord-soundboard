@@ -97,3 +97,43 @@ func legacyLiveFrame(data []byte) []byte {
 	}
 	return out.Bytes()
 }
+
+// Version 2 packs the large library as [name, extension] tuples. Leave small
+// live events untouched, and retain object entries for version 1 clients.
+func compactLiveFrame(data []byte) []byte {
+	if !bytes.Contains(data, []byte(`"library":`)) {
+		return data
+	}
+	var out bytes.Buffer
+	for _, line := range bytes.Split(data, []byte{'\n'}) {
+		if len(line) == 0 {
+			continue
+		}
+		var event map[string]json.RawMessage
+		if err := json.Unmarshal(line, &event); err != nil {
+			panic(err)
+		}
+		if library, ok := event["library"]; ok {
+			var files []liveFile
+			if err := json.Unmarshal(library, &files); err != nil {
+				panic(err)
+			}
+			tuples := make([][2]string, 0, len(files))
+			for _, file := range files {
+				tuples = append(tuples, [2]string{file.Name, file.Ext})
+			}
+			packed, err := json.Marshal(tuples)
+			if err != nil {
+				panic(err)
+			}
+			event["library"] = packed
+			line, err = json.Marshal(event)
+			if err != nil {
+				panic(err)
+			}
+		}
+		out.Write(line)
+		out.WriteByte('\n')
+	}
+	return out.Bytes()
+}

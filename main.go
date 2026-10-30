@@ -440,6 +440,7 @@ func main() {
 		defer c.Close()
 		c.SetCompressionLevel(flate.BestSpeed)
 		jsonProtocol := r.URL.Query().Get("format") == "json"
+		compactProtocol := jsonProtocol && r.URL.Query().Get("v") == "2"
 		soundChan := make(chan []byte, 100)
 		soundsWithOrdinal := make([]SoundboardSoundWithOrdinal, 0)
 		soundsMu.RLock()
@@ -472,6 +473,8 @@ func main() {
 					payload := sound
 					if !jsonProtocol {
 						payload = legacyLiveFrame(sound)
+					} else if compactProtocol {
+						payload = compactLiveFrame(sound)
 					}
 					err = c.WriteMessage(websocket.TextMessage, payload)
 				}
