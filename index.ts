@@ -1,3 +1,4 @@
+import { initLibraryPreview, stopLibraryPreview } from './library-preview';
 import { initMobilePreview, decorateMobilePreview, refreshMobilePreview } from './mobile-preview';
 // import * as amplitude from '@amplitude/analytics-browser';
 // import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
@@ -96,6 +97,14 @@ const highlightSound = (el: any, audio: any, soundId: string) => {
 }
 
 const playingAudio: Record<string, any> = {};
+let previewVersion = 0;
+const stopBoardPreviews = () => {
+    previewVersion++;
+    Object.values(playingAudio).forEach(audio => audio.pause());
+    Object.values(playTimeouts).forEach(clearTimeout);
+    document.querySelectorAll('#playable-sounds .sound-playing').forEach(card => card.classList.remove('sound-playing'));
+};
+
 
 /**
  *    Mute sounds | Play send sounds | IsSendSound? || Sound played?
@@ -110,6 +119,11 @@ const playingAudio: Record<string, any> = {};
 const playSound = (elId: any, soundId: string, sent: boolean) => {
     sent = sent === undefined ? false : sent
     if (sent && (muted.state || !shouldPlaySendSounds.state)) return;
+    if (!sent) {
+        stopLibraryPreview();
+        stopBoardPreviews();
+    }
+    const version = previewVersion;
     if (playingAudio[soundId]) {
         playingAudio[soundId].pause();
     }
@@ -119,6 +133,7 @@ const playSound = (elId: any, soundId: string, sent: boolean) => {
     // automatic local echoes of sends to Discord.
     if (!sent) {
         audio.addEventListener('playing', () => {
+            if (version !== previewVersion) return;
             recordRecentSound(document.getElementById(elId)?.getAttribute('data-soundname') || '');
             void fetch('/analytics/play', {
                 method: 'POST',
@@ -133,6 +148,7 @@ const playSound = (elId: any, soundId: string, sent: boolean) => {
         el = document.querySelector('#' + elId)
     }
     audio.addEventListener("canplaythrough", () => {
+        if (!sent && version !== previewVersion) return;
         if (el) {
             highlightSound(el, audio, soundId)
         }
@@ -146,6 +162,7 @@ const playSound = (elId: any, soundId: string, sent: boolean) => {
 
 const muteSounds = (ev: any) => {
     muted.update(ev.target.checked)
+    if (ev.target.checked) {stopLibraryPreview(); stopBoardPreviews();}
 }
 
 const playSendSounds = (ev: any) => {
@@ -363,6 +380,7 @@ document.getElementById('mute-sounds-checkbox')?.addEventListener('change', mute
 document.getElementById('play-send-sounds-checkbox')?.addEventListener('change', playSendSounds);
 
 initUIPreview();
+initLibraryPreview(recordRecentSound, () => Boolean(muted.state), stopBoardPreviews);
 initMobilePreview();
 initSoundMetadata(syncLibraryPreview);
 enableDragDropTouch();

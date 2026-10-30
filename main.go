@@ -229,7 +229,8 @@ func main() {
 			os.Exit(0)
 		}()
 	}
-	analyticsRoutes := analyticsHandler(analytics, soundName)
+	analyticsRoutes := analyticsHandler(analytics, soundName, func(filename string) (string, bool) { return librarySoundName(soundsDir, filename) })
+	http.Handle("/library-audio", libraryAudioHandler(soundsDir))
 	http.Handle("/analytics", analyticsRoutes)
 	http.Handle("/analytics/play", analyticsRoutes)
 

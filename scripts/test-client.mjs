@@ -29,12 +29,14 @@ const mobileMedia={matches:false,addEventListener:(event,fn)=>mobileListeners.ad
 window.matchMedia=()=>mobileMedia;
 Object.defineProperty(globalThis,'navigator',{value:{maxTouchPoints:0},configurable:true});
 const audios=[];
+let failNextAudio=false;
+let deferNextAudio=false;
 globalThis.Audio=class {
- constructor(){this.handlers=new Map();this.duration=0.01;audios.push(this)}
+ constructor(src){this.src=src;this.paused=true;this.handlers=new Map();this.duration=0.01;audios.push(this)}
  addEventListener(name,fn,options){this.handlers.set(name,{fn,once:options?.once})}
  emit(name){const handler=this.handlers.get(name);if(!handler)return;if(handler.once)this.handlers.delete(name);handler.fn()}
- pause(){}
- play(){this.emit('playing');return Promise.resolve()}
+ pause(){this.paused=true}
+ play(){if(failNextAudio){failNextAudio=false;return Promise.reject(Error('playback failed'))}this.paused=false;if(deferNextAudio){deferNextAudio=false;return Promise.resolve()}this.emit('playing');return Promise.resolve()}
 };
 let socket;
 globalThis.WebSocket=class {constructor(url){this.url=String(url);socket=this} close(){}};
@@ -413,3 +415,76 @@ assert.equal(document.querySelector('.slot-pick'),null,'leaving mobile layout ca
 assert.equal(document.body.classList.contains('mobile-preview'),false);
 assert.equal(document.querySelector('#playable-sounds .slot-unavailable'),null);
 console.log('PASS: mobile preview selection, cancellation, permissions, reservations, live replacements, free slots, and opt-out');
+
+const beforeLibraryAudio=audios.length;
+wire({type:'board',slots:[],hasEmpty:true,library:[['Local & "quote"','.ogg'],['Local MP3','.mp3']]});
+assert.equal(audios.length,beforeLibraryAudio,'rendering a library must not fetch audio');
+assert.equal(document.querySelectorAll('#storedsounds [data-library-preview]').length,2);
+const muteForLibrary=document.getElementById('mute-sounds-checkbox');
+muteForLibrary.checked=false;muteForLibrary.dispatchEvent(new window.Event('change'));
+const previewButtons=()=>Array.from(document.querySelectorAll('#storedsounds [data-library-preview]'));
+const tapButton=async button=>{button.dispatchEvent(new window.Event('click',{bubbles:true}));await new Promise(setImmediate)};
+const initialLocalSwaps=calls.filter(call=>call.url==='/swap-sound').length;
+const initialLocalPlays=calls.filter(call=>call.url==='/analytics/play').length;
+await tapButton(previewButtons()[0]);
+const localOgg=audios.at(-1);
+assert.equal(localOgg.src,'/library-audio?file=Local+%26+%22quote%22.ogg');
+assert.equal(localOgg.paused,false);
+assert.equal(previewButtons()[0].textContent,'Stop');
+assert.equal(previewButtons()[0].getAttribute('aria-pressed'),'true');
+assert.deepEqual(JSON.parse(calls.filter(call=>call.url==='/analytics/play').at(-1).body),{soundLocation:'Local & "quote".ogg'});
+localOgg.emit('playing');
+assert.equal(calls.filter(call=>call.url==='/analytics/play').length,initialLocalPlays+1,'count playback once');
+await tapButton(previewButtons()[1]);
+const localMp3=audios.at(-1);
+assert.equal(localOgg.paused,true);
+assert.equal(previewButtons()[0].textContent,'Preview');
+assert.equal(localMp3.src,'/library-audio?file=Local+MP3.mp3');
+await tapButton(previewButtons()[1]);
+assert.equal(localMp3.paused,true);
+assert.equal(previewButtons()[1].textContent,'Preview');
+const beforeFailedPlays=calls.filter(call=>call.url==='/analytics/play').length;
+failNextAudio=true;
+await tapButton(previewButtons()[0]);
+assert.equal(previewButtons()[0].textContent,'Preview');
+assert.ok(document.getElementById('library-preview-status').textContent.includes('Could not preview'));
+assert.equal(calls.filter(call=>call.url==='/analytics/play').length,beforeFailedPlays);
+deferNextAudio=true;
+await tapButton(previewButtons()[0]);
+const pendingAudio=audios.at(-1);
+assert.equal(previewButtons()[0].getAttribute('aria-busy'),'true');
+await tapButton(previewButtons()[1]);
+assert.equal(pendingAudio.paused,true);
+const beforeLatePlaying=calls.filter(call=>call.url==='/analytics/play').length;
+pendingAudio.emit('playing');
+assert.equal(calls.filter(call=>call.url==='/analytics/play').length,beforeLatePlaying,'ignore obsolete audio callbacks');
+audios.at(-1).emit('ended');
+assert.equal(previewButtons()[1].textContent,'Preview');
+muteForLibrary.checked=true;muteForLibrary.dispatchEvent(new window.Event('change'));
+const beforeMutedLibrary=audios.length;
+await tapButton(previewButtons()[0]);
+assert.equal(audios.length,beforeMutedLibrary,'muted previews should not fetch audio');
+assert.equal(document.getElementById('library-preview-status').textContent,'Unmute sounds to preview.');
+muteForLibrary.checked=false;muteForLibrary.dispatchEvent(new window.Event('change'));
+await tapButton(previewButtons()[0]);
+const optedOutAudio=audios.at(-1);
+mobileToggle.checked=false;mobileToggle.dispatchEvent(new window.Event('change'));
+assert.equal(optedOutAudio.paused,true,'turning preview off stops audio');
+const beforeDisabledLibrary=audios.length;
+await tapButton(previewButtons()[1]);
+assert.equal(audios.length,beforeDisabledLibrary);
+assert.equal(calls.filter(call=>call.url==='/swap-sound').length,initialLocalSwaps,'preview never uploads to Discord');
+console.log('PASS: on-demand local Ogg/MP3 previews, stop/switch, actual-play analytics, stale callbacks, failures, mute and opt-out');
+
+mobileToggle.checked=true;mobileToggle.dispatchEvent(new window.Event('change'));
+await tapButton(previewButtons()[0]);
+const beforeBoardPreview=audios.at(-1);
+await click('#soundboard-0 [data-action="preview"]');
+const slowBoardPreview=audios.at(-1);
+assert.equal(beforeBoardPreview.paused,true,'uploaded previews stop local previews');
+await tapButton(previewButtons()[1]);
+slowBoardPreview.emit('canplaythrough');
+assert.equal(slowBoardPreview.paused,true,'obsolete uploaded preview cannot start after a local preview');
+assert.equal(audios.at(-1).paused,false);
+audios.at(-1).emit('ended');
+console.log('PASS: uploaded and local previews stop each other, including delayed loading');

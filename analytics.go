@@ -182,7 +182,7 @@ func (a *LocalAnalytics) Close() error {
 
 // Browser reports only sound IDs. Names are resolved against the current board,
 // rather than allowing arbitrary names or event types into persistent counters.
-func analyticsHandler(a *LocalAnalytics, soundName func(string) (string, bool)) http.Handler {
+func analyticsHandler(a *LocalAnalytics, soundName func(string) (string, bool), libraryName ...func(string) (string, bool)) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/analytics", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -211,13 +211,20 @@ func analyticsHandler(a *LocalAnalytics, soundName func(string) (string, bool)) 
 			return
 		}
 		input := struct {
-			SoundID string `json:"soundID"`
+			SoundID       string `json:"soundID"`
+			SoundLocation string `json:"soundLocation"`
 		}{}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&input); err != nil {
 			http.Error(w, "Invalid playback event", http.StatusBadRequest)
 			return
 		}
-		name, ok := soundName(input.SoundID)
+		var name string
+		var ok bool
+		if input.SoundID != "" && input.SoundLocation == "" {
+			name, ok = soundName(input.SoundID)
+		} else if input.SoundID == "" && input.SoundLocation != "" && len(libraryName) > 0 {
+			name, ok = libraryName[0](input.SoundLocation)
+		}
 		if !ok {
 			http.Error(w, "Unknown sound", http.StatusBadRequest)
 			return

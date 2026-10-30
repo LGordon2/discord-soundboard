@@ -163,3 +163,12 @@ notifications, and tap-to-replace. Tap **Choose slot** on a library card, then
 Escape exits without uploading; busy and other users' protected slots cannot be
 chosen. The **+** button continues to add directly to a free slot. Leaving preview
 or the mobile layout cancels an active selection. The setting remains browser-local.
+
+With **Preview new UI** enabled, library cards include **Preview** to audition
+local Ogg/MP3 files without uploading to Discord or occupying a slot. Tap again
+to stop; selecting another local or uploaded preview stops the previous preview.
+Audio loads only on demand. Mute and disabling preview stop local playback.
+Actual playback increments the existing SQLite played counter and recent history;
+failed/muted playback and fetching audio files alone do not count as plays.
+The `/library-audio?file=<filename>` endpoint supports GET/HEAD, seeking via byte
+ranges, and cache revalidation, and serves only regular Ogg/MP3 library files.

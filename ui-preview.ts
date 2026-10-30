@@ -1,3 +1,4 @@
+import { decorateLibraryPreview } from './library-preview';
 import { createSoundSearch } from './sound-search';
 import { decorateSoundMetadata, getSoundMetadata } from './sound-metadata';
 
@@ -63,6 +64,7 @@ export const syncLibraryPreview = () => {
     let visible = 0;
     let available = 0;
     document.querySelectorAll<HTMLElement>('#storedsounds .add-sound-component').forEach(card => {
+        decorateLibraryPreview(card);
         const name = card.getAttribute('data-soundname') || '';
         const filename = name + (card.getAttribute('data-soundext') || '');
         let favorite = card.querySelector<HTMLButtonElement>('[data-favorite]');
