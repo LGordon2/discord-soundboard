@@ -19,7 +19,7 @@ var hashedAssetPath = regexp.MustCompile(`^/assets/[^/]+-[A-Za-z0-9_-]{8}\.[a-zA
 func staticHandler(directory string, initialDescriptions ...func() [soundboardSoundCount]bool) http.Handler {
 	files := http.FileServer(http.Dir(directory))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Cache-Control", "no-cache, no-transform")
 		if r.URL.Path == "/" && len(initialDescriptions) > 0 && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 			if page, err := os.ReadFile(filepath.Join(directory, "index.html")); err == nil {
 				var layout strings.Builder

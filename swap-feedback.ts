@@ -146,6 +146,9 @@ export const applySharedSwitches = (value: unknown) => {
 };
 
 export const isSwitching = (id: string) => pendingSwaps.has(id) || sharedSwaps.has(id);
+export const switchingSoundNames = () => new Set([
+    ...Array.from(pendingSwaps.values(), pending => pending.name), ...sharedSwaps.values(),
+]);
 export const isSoundSwitching = (name: string) => {
     for (const pending of pendingSwaps.values()) if (pending.name === name) return true;
     for (const shared of sharedSwaps.values()) if (shared === name) return true;

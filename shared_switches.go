@@ -23,9 +23,11 @@ type SharedSwitchSnapshot struct {
 }
 type sharedSwitchOperation struct {
 	SharedSwitch
-	token   uint64
-	soundID string
-	timer   *time.Timer
+	started    time.Time
+	acceptedAt time.Time
+	token      uint64
+	soundID    string
+	timer      *time.Timer
 }
 type SharedSwitches struct {
 	mu      sync.Mutex
@@ -76,13 +78,16 @@ func (s *SharedSwitches) Begin(slot int, name string) (uint64, error) {
 	}
 	s.version++
 	token := s.version
-	s.pending[slot] = &sharedSwitchOperation{SharedSwitch: SharedSwitch{Slot: slot, Name: name}, token: token}
+	s.pending[slot] = &sharedSwitchOperation{SharedSwitch: SharedSwitch{Slot: slot, Name: name}, token: token, started: time.Now()}
 	snapshot := s.snapshotLocked()
 	s.mu.Unlock()
 	s.publish(switchStateFrame(snapshot))
 	return token, nil
 }
 func (s *SharedSwitches) Remove(slot int, token uint64) {
+	s.remove(slot, token, "failed")
+}
+func (s *SharedSwitches) remove(slot int, token uint64, outcome string) {
 	s.mu.Lock()
 	pending := s.pending[slot]
 	if pending == nil || pending.token != token {
@@ -92,6 +97,7 @@ func (s *SharedSwitches) Remove(slot int, token uint64) {
 	if pending.timer != nil {
 		pending.timer.Stop()
 	}
+	log.Printf("switch_timing operation=%s-%d slot=%d stage=complete outcome=%s total_ms=%.3f", s.epoch, token, slot, outcome, float64(time.Since(pending.started))/float64(time.Millisecond))
 	delete(s.pending, slot)
 	s.version++
 	snapshot := s.snapshotLocked()
@@ -100,7 +106,7 @@ func (s *SharedSwitches) Remove(slot int, token uint64) {
 }
 func (s *SharedSwitches) Accepted(slot int, token uint64, soundID string) {
 	if soundID == "" {
-		s.Remove(slot, token)
+		s.remove(slot, token, "missing_id")
 		return
 	}
 	s.mu.Lock()
@@ -110,7 +116,9 @@ func (s *SharedSwitches) Accepted(slot int, token uint64, soundID string) {
 		return
 	}
 	pending.soundID = soundID
-	pending.timer = time.AfterFunc(s.timeout, func() { s.Remove(slot, token) })
+	pending.acceptedAt = time.Now()
+	log.Printf("switch_timing operation=%s-%d slot=%d stage=accepted elapsed_ms=%.3f", s.epoch, token, slot, float64(time.Since(pending.started))/float64(time.Millisecond))
+	pending.timer = time.AfterFunc(s.timeout, func() { s.remove(slot, token, "timeout") })
 }
 
 // Complete state is attached to the same frame that renders the new sound, so
@@ -127,6 +135,7 @@ func (s *SharedSwitches) Resolve(updates []SoundboardSoundWithOrdinal) {
 				if pending.timer != nil {
 					pending.timer.Stop()
 				}
+				log.Printf("switch_timing operation=%s-%d slot=%d stage=complete outcome=confirmed gateway_wait_ms=%.3f total_ms=%.3f", s.epoch, pending.token, slot, float64(time.Since(pending.acceptedAt))/float64(time.Millisecond), float64(time.Since(pending.started))/float64(time.Millisecond))
 				delete(s.pending, slot)
 				s.version++
 				break
@@ -198,6 +207,7 @@ func (h *trackedSwapHandler) HandleInput(w http.ResponseWriter, input swapSoundI
 			h.state.Remove(slot, token)
 		}
 	}()
+	input.trace = fmt.Sprintf("%s-%d", h.state.epoch, token)
 	result, err := h.execute(input)
 	if err != nil {
 		log.Printf("[error] swapping sound: %v", err)

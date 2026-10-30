@@ -131,3 +131,8 @@ and hydrate only replaced cards. Related events share one message so confirmatio
 and loading completion apply together. WebSocket compression remains enabled.
 Connections to `/ws` without the format parameter retain HTML fragments for cached
 clients during deployment; the JSON path does not generate server-side card HTML.
+
+Cloudflare's automatic analytics beacon is suppressed by the HTML response's
+`no-transform` policy. Added/sent/played counters continue to use local SQLite.
+Correlated switching diagnostics are available in the service journal; see
+[PERFORMANCE.md](PERFORMANCE.md) for stages, interpretation, and the log command.

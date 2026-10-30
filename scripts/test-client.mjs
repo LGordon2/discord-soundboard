@@ -311,3 +311,28 @@ wire({type:'metadata'});
 await new Promise(resolve=>setTimeout(resolve,0));
 assert.ok(metadataCalls.length>beforeJSONMetadata);
 console.log('PASS: JSON library snapshot, availability, and metadata invalidation');
+// Ordinary slot/loading events must not rescan or redecorate the full library.
+const libraryNode=document.getElementById('storedsounds');
+const originalDocumentQuery=document.querySelectorAll;
+const originalLibraryQuery=libraryNode.querySelectorAll;
+let fullLibraryScans=0;
+document.querySelectorAll=function(selector){if(selector.includes('#storedsounds .add-sound-component') || selector==='[data-soundname]')fullLibraryScans++;return originalDocumentQuery.call(this,selector)};
+libraryNode.querySelectorAll=function(selector){if(selector==='.add-sound-component')fullLibraryScans++;return originalLibraryQuery.call(this,selector)};
+try {
+ wire({type:'board',slots:[],hidden:[],hasEmpty:true});
+ assert.equal(document.getElementById('library-count').textContent,'2 of 2 available sounds');
+ wire({type:'board',slots:[],hidden:['Already uploaded'],hasEmpty:true});
+ assert.equal(document.getElementById('library-count').textContent,'1 of 1 available sounds');
+ wire({type:'switches',switches:{epoch:'targeted',version:1,pending:[{slot:1,name:'JSON & library <sound>'}]}});
+ assert.equal(libraryNode.querySelector('[data-soundname="JSON & library <sound>"] button[data-action="add"]').getAttribute('aria-busy'),'true');
+ wire({type:'switches',switches:{epoch:'targeted',version:2,pending:[]}});
+ assert.equal(libraryNode.querySelector('[data-soundname="JSON & library <sound>"] button[data-action="add"]').hasAttribute('aria-busy'),false);
+ assert.equal(fullLibraryScans,0,'availability/loading deltas should use indexed cards and cached counts');
+} finally {document.querySelectorAll=originalDocumentQuery;libraryNode.querySelectorAll=originalLibraryQuery;}
+// Replacing the library must invalidate the index, including same-name formats.
+wire({type:'board',slots:[],hidden:['Variant'],hasEmpty:true,library:[{name:'Variant',ext:'.ogg'},{name:'Variant',ext:'.mp3'},{name:'Other',ext:'.ogg'}]});
+assert.equal(document.getElementById('library-count').textContent,'1 of 1 available sounds');
+wire({type:'board',slots:[],hidden:[],hasEmpty:true});
+assert.equal(document.getElementById('library-count').textContent,'3 of 3 available sounds');
+assert.equal(document.querySelectorAll('#storedsounds .hidden').length,0);
+console.log('PASS: targeted availability/loading updates avoid full library scans; replacement and file variants retain correct counts');

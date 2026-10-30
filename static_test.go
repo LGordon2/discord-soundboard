@@ -26,10 +26,10 @@ func TestStaticCachePolicy(t *testing.T) {
 		path, policy string
 		status       int
 	}{
-		{"/", "no-cache", 200},
+		{"/", "no-cache, no-transform", 200},
 		{"/assets/index-Ab12_cd9.js", "public, max-age=31536000, immutable", 200},
-		{"/assets/missing-Ab12_cd9.js", "no-cache", 404},
-		{"/missing", "no-cache", 404},
+		{"/assets/missing-Ab12_cd9.js", "no-cache, no-transform", 404},
+		{"/missing", "no-cache, no-transform", 404},
 	} {
 		response, err := http.Get(server.URL + tc.path)
 		if err != nil {

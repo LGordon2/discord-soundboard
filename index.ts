@@ -1,9 +1,9 @@
 // import * as amplitude from '@amplitude/analytics-browser';
 // import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
 import { enableDragDropTouch } from '@dragdroptouch/drag-drop-touch';
-import { isSwitching, isSoundSwitching, switchSound, reconcileSwitches, applySharedSwitches } from './swap-feedback';
+import { isSwitching, switchSound, reconcileSwitches, applySharedSwitches, switchingSoundNames } from './swap-feedback';
 import { connectBoard } from './live-updates';
-import { initUIPreview, syncLibraryPreview, recordRecentSound } from './ui-preview';
+import { initUIPreview, syncLibraryPreview, syncLibraryAvailability, recordRecentSound } from './ui-preview';
 import { initSoundMetadata, decorateSoundMetadata, refreshSoundMetadata } from './sound-metadata';
 
 const playTimeouts: Record<string, any> = {};
@@ -173,13 +173,38 @@ const dragEnd = () => {
 const freeSoundSlot = () => Array.from(document.querySelectorAll<HTMLElement>('#playable-sounds .droppable[data-soundid=""]'))
     .find(card => !isSwitching(card.id));
 
-const updateAddButtons = (hasEmpty: boolean) => {
-    const available = hasEmpty && Boolean(freeSoundSlot());
-    document.querySelectorAll<HTMLElement>('#storedsounds .add-sound-component').forEach(card => {
+let libraryRoot: HTMLElement | null = null;
+const libraryCards = new Map<string, HTMLElement[]>();
+let hiddenLibraryNames = new Set<string>();
+let previousPending = new Set<string>();
+let previousAvailable: boolean | undefined;
+const indexLibrary = () => {
+    const root = document.getElementById('storedsounds');
+    if (root === libraryRoot) return false;
+    libraryRoot = root;
+    libraryCards.clear();
+    root?.querySelectorAll<HTMLElement>('.add-sound-component').forEach(card => {
         const name = card.getAttribute('data-soundname') || '';
+        const cards = libraryCards.get(name) || [];
+        cards.push(card);
+        libraryCards.set(name, cards);
+    });
+    hiddenLibraryNames = new Set();
+    previousPending = new Set();
+    previousAvailable = undefined;
+    return true;
+};
+
+const updateAddButtons = (hasEmpty: boolean) => {
+    indexLibrary();
+    const available = hasEmpty && Boolean(freeSoundSlot());
+    const pendingNames = switchingSoundNames();
+    const names = previousAvailable !== available ? libraryCards.keys() :
+        new Set([...previousPending, ...pendingNames].filter(name => previousPending.has(name) !== pendingNames.has(name)));
+    for (const name of names) for (const card of libraryCards.get(name) || []) {
         const button = card.querySelector<HTMLButtonElement>('button[data-action="add"]');
-        if (!button) return;
-        const pending = isSoundSwitching(name);
+        if (!button) continue;
+        const pending = pendingNames.has(name);
         button.disabled = !available || pending;
         if (pending && button.getAttribute('aria-busy') !== 'true') {
             button.setAttribute('aria-busy', 'true');
@@ -189,25 +214,30 @@ const updateAddButtons = (hasEmpty: boolean) => {
             iconLoad(button, 'plus');
         }
         button.setAttribute('aria-label', `${pending ? 'Adding' : 'Add'} ${name}`);
-    });
+    }
+    previousPending = pendingNames;
+    previousAvailable = available;
 };
 
 document.addEventListener('soundboard:switch-state', () => {
     updateAddButtons(document.getElementById('addsoundscript')?.getAttribute('data-has-empty') === 'true');
 });
 
-const addSoundUpdates = (hiddenSounds: any, hasEmpty: boolean) => {
-    document.querySelectorAll(".add-sound-component").forEach((el) => {
-        const soundName = el.getAttribute('data-soundname');
-        if (soundName && hiddenSounds.includes(soundName)) { // should be hidden
-            el.classList.add('hidden');
-        } else {
-            el.classList.remove('hidden');
-        }
-    });
+const addSoundUpdates = (hiddenSounds: string[], hasEmpty: boolean) => {
+    const replaced = indexLibrary();
+    const next = new Set(hiddenSounds);
+    const names = replaced ? libraryCards.keys() :
+        new Set([...hiddenLibraryNames, ...next].filter(name => hiddenLibraryNames.has(name) !== next.has(name)));
+    const changed: HTMLElement[] = [];
+    for (const name of names) for (const card of libraryCards.get(name) || []) {
+        card.classList.toggle('hidden', next.has(name));
+        changed.push(card);
+    }
+    hiddenLibraryNames = next;
     updateAddButtons(hasEmpty);
-    syncLibraryPreview();
-}
+    if (replaced) syncLibraryPreview();
+    else syncLibraryAvailability(changed);
+};
 
 // TODO this is pretty much the same as play sound
 (window as any)._highlightSound = (elId: any, soundId: string, _soundName: string) => {

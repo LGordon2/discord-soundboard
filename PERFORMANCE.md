@@ -136,3 +136,35 @@ removed after the browser has both snapshots. This avoids making every card tall
 while still reserving the known description heights before paint. Generated HTML
 uses a content-derived ETag so a description being added/cleared invalidates its
 initial layout hint correctly.
+
+## Correlated switching diagnostics and indexed library updates
+
+Each tracked switch logs `switch_timing operation=<epoch>-<token>` records to the
+service journal. Stages `prepare`, `delete`, and `create` report `duration_ms` and
+success. Delete/create include DiscordGo's rate-limit waits and retries. The
+`accepted` stage reports elapsed time through the successful upload response.
+Completion records distinguish `confirmed`, `failed`, `timeout`, and `missing_id`.
+Confirmed completion includes `gateway_wait_ms` (acceptance until the confirming
+card is prepared for broadcast) and `total_ms`. If the Gateway beats the HTTP
+response, the existing board refresh confirms it immediately after acceptance.
+This measures the service's confirmation path, not Discord client's audio
+readiness or browser delivery. No credentials, audio, or descriptions are logged.
+
+Inspect with:
+
+```sh
+journalctl -u discord-soundboard.service --since '10 minutes ago' --grep switch_timing
+```
+
+The browser indexes library cards by name after a library replacement. Uploaded
+name changes update only affected cards and adjust cached availability counts;
+loading-state changes update only affected add buttons. A capacity transition
+still updates all add buttons because their permissions actually change. Full
+search/filter/metadata work remains for changes that require it. Regression tests
+verify ordinary slot/loading events perform no full library scans, counts stay
+correct, and replacing the library invalidates the index, including file variants.
+
+HTML responses now include `Cache-Control: no-cache, no-transform`. The
+`no-transform` directive prevents Cloudflare's automatic Web Analytics beacon
+injection while HTML still revalidates. Local SQLite analytics are unaffected.
+See https://developers.cloudflare.com/web-analytics/get-started/ .

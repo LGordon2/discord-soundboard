@@ -31,6 +31,33 @@ const updateFavorite = (button: HTMLButtonElement, filename: string) => {
     button.title = selected ? 'Remove from favorites' : 'Add to favorites';
 };
 
+let availableCount = 0;
+let visibleCount = 0;
+const countedCards = new WeakMap<HTMLElement, {available: boolean; visible: boolean}>();
+const showLibraryCounts = () => {
+    const count = document.getElementById('library-count');
+    const loading = document.getElementById('storedsounds')?.getAttribute('aria-busy') === 'true';
+    const text = loading ? 'Loading sounds…' : `${visibleCount} of ${availableCount} available sounds`;
+    if (count && count.textContent !== text) count.textContent = text;
+    const empty = document.getElementById('library-empty');
+    if (empty) empty.hidden = !enabled || loading || visibleCount > 0;
+};
+
+// Availability changes leave search, favorites, metadata and ordering intact.
+// Adjust the cached counts using only cards whose uploaded status changed.
+export const syncLibraryAvailability = (cards: HTMLElement[]) => {
+    for (const card of cards) {
+        const previous = countedCards.get(card);
+        if (!previous) { syncLibraryPreview(); return; }
+        const available = !card.classList.contains('hidden');
+        const visible = available && !card.hidden;
+        availableCount += Number(available) - Number(previous.available);
+        visibleCount += Number(visible) - Number(previous.visible);
+        countedCards.set(card, {available, visible});
+    }
+    showLibraryCounts();
+};
+
 export const syncLibraryPreview = () => {
     const matchesSearch = createSoundSearch(query);
     let visible = 0;
@@ -55,18 +82,16 @@ export const syncLibraryPreview = () => {
         card.hidden = enabled && !matches;
         if (enabled && filter === 'recent') card.style.order = String(recentIndex);
         else card.style.removeProperty('order');
-        if (!card.classList.contains('hidden')) {
-            available++;
-            if (!card.hidden) visible++;
-        }
+        const isAvailable = !card.classList.contains('hidden');
+        const isVisible = isAvailable && !card.hidden;
+        countedCards.set(card, {available: isAvailable, visible: isVisible});
+        if (isAvailable) available++;
+        if (isVisible) visible++;
     });
     decorateSoundMetadata(document);
-    const count = document.getElementById('library-count');
-    const loading = document.getElementById('storedsounds')?.getAttribute('aria-busy') === 'true';
-    const text = loading ? 'Loading sounds…' : `${visible} of ${available} available sounds`;
-    if (count && count.textContent !== text) count.textContent = text;
-    const empty = document.getElementById('library-empty');
-    if (empty) empty.hidden = !enabled || loading || visible > 0;
+    availableCount = available;
+    visibleCount = visible;
+    showLibraryCounts();
 };
 
 export const recordRecentSound = (name: string) => {

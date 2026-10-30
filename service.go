@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"strings"
+	"time"
 )
 
 type deleteSoundInput struct {
@@ -72,6 +74,7 @@ func addSound(discordClient *DiscordRestClient, storedSounds storedSoundMap, inp
 }
 
 type swapSoundInput struct {
+	trace  string
 	Slot   *int             `json:"slot,omitempty"`
 	Add    addSoundInput    `json:"add"`
 	Delete deleteSoundInput `json:"delete"`
@@ -88,19 +91,27 @@ func swapSoundResult(client *DiscordRestClient, storedSounds storedSoundMap, inp
 	var request CreateSoundboardSoundRequest
 	var err error
 	if input.Add != (addSoundInput{}) {
+		started := time.Now()
 		request, err = prepareStoredSound(storedSounds, input.Add)
+		log.Printf("switch_timing operation=%s stage=prepare duration_ms=%.3f success=%t", input.trace, float64(time.Since(started))/float64(time.Millisecond), err == nil)
 		if err != nil {
 			return CreateSoundboardSoundResponse{}, err
 		}
 	}
 	// The board can be full: creation must wait for successful deletion.
 	if input.Delete != (deleteSoundInput{}) {
-		if err := deleteSound(client, guildID, input.Delete); err != nil {
+		started := time.Now()
+		err := deleteSound(client, guildID, input.Delete)
+		log.Printf("switch_timing operation=%s stage=delete duration_ms=%.3f success=%t", input.trace, float64(time.Since(started))/float64(time.Millisecond), err == nil)
+		if err != nil {
 			return CreateSoundboardSoundResponse{}, err
 		}
 	}
 	if input.Add != (addSoundInput{}) {
-		return client.createSoundboardSound(guildID, request)
+		started := time.Now()
+		result, err := client.createSoundboardSound(guildID, request)
+		log.Printf("switch_timing operation=%s stage=create duration_ms=%.3f success=%t", input.trace, float64(time.Since(started))/float64(time.Millisecond), err == nil)
+		return result, err
 	}
 	return CreateSoundboardSoundResponse{}, err
 }
