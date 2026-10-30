@@ -316,7 +316,7 @@ func TestEmojiEditingPersistsAndSurvivesGatewaySnapshots(t *testing.T) {
 }
 
 func TestEditedEmojiInputs(t *testing.T) {
-	for _, value := range []string{"☕️", "1️⃣", "🇺🇸", "👍🏽", "👨‍👩‍👧‍👦"} {
+	for _, value := range []string{"☕️", "1️⃣", "🇺🇸", "👍🏽", "👨‍👩‍👧‍👦", "‼️", "⁉️"} {
 		id, emoji, err := parseEditedEmoji(value)
 		if err != nil || id != "" || emoji != value {
 			t.Fatalf("valid Unicode rejected: %s %v", value, err)

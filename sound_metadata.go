@@ -239,7 +239,7 @@ func parseEditedEmoji(value string) (string, string, error) {
 		hasSymbol, valid := false, true
 		for _, r := range value {
 			switch {
-			case unicode.IsSymbol(r):
+			case unicode.IsSymbol(r), r == '\u203c', r == '\u2049':
 				hasSymbol = true
 			case unicode.IsMark(r), r == '\u200d', r == '#', r == '*', r >= '0' && r <= '9':
 				if r == '\u20e3' {

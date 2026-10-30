@@ -180,3 +180,10 @@ sound is not reuploaded by editing details. Manual choices (including removal)
 are persisted in SQLite and protected from later Gateway snapshots. Editing only
 the description preserves automatic emoji synchronization. Invalid/unavailable
 custom emoji retain the existing upload retry without emoji.
+
+**Choose emoji** in the info dialog opens a searchable common-emoji palette with
+categories, skin tones for supported hand gestures, and a Custom category built
+from emoji already stored in sound metadata. Selecting one fills the editor;
+**Save details** persists it. **Remove emoji** clears the choice. The palette is a
+separate lazy-loaded local JavaScript chunk, with no external picker scripts or
+emoji image sheets. Unicode/custom values can still be pasted directly.

@@ -104,6 +104,48 @@ export const initSoundMetadata = (updated: () => void) => {
     const form = document.getElementById('sound-details-form') as HTMLFormElement | null;
     const input = document.getElementById('sound-description') as HTMLTextAreaElement | null;
     const emojiInput = document.getElementById('sound-emoji') as HTMLInputElement | null;
+    const pickerButton = document.getElementById('choose-sound-emoji') as HTMLButtonElement | null;
+    const pickerRoot = document.getElementById('sound-emoji-picker');
+    let pickerVersion = 0;
+    const hidePicker = () => {
+        pickerVersion++;
+        if (pickerRoot) {pickerRoot.hidden = true; pickerRoot.replaceChildren();}
+        pickerButton?.setAttribute('aria-expanded', 'false');
+    };
+    pickerButton?.addEventListener('click', async () => {
+        if (!pickerRoot || !emojiInput || saving) return;
+        if (!pickerRoot.hidden) {hidePicker(); return;}
+        const version = ++pickerVersion;
+        pickerRoot.hidden = false;
+        pickerRoot.textContent = 'Loading emoji…';
+        pickerButton.setAttribute('aria-expanded', 'true');
+        try {
+            const { mountEmojiPicker } = await import('./emoji-picker');
+            if (version !== pickerVersion || !dialog?.hasAttribute('open')) return;
+            const ids = new Set<string>();
+            const custom = Object.entries(metadata).flatMap(([sound, value]) => {
+                if (!value.emoji_id || !/^\d+$/.test(value.emoji_id) || ids.has(value.emoji_id)) return [];
+                ids.add(value.emoji_id);
+                return [{value: value.emoji_id, label: `${sound} custom emoji`, group: 'Custom', image: `https://cdn.discordapp.com/emojis/${value.emoji_id}.webp?size=32`}];
+            });
+            mountEmojiPicker(pickerRoot, custom, value => {
+                emojiInput.value = value;
+                hidePicker();
+                pickerButton.focus();
+            });
+        } catch {
+            if (version === pickerVersion) pickerRoot.textContent = 'Could not load the emoji picker. You can still paste an emoji below.';
+        }
+    });
+    document.getElementById('clear-sound-emoji')?.addEventListener('click', () => {
+        if (emojiInput && !saving) {emojiInput.value = ''; hidePicker(); emojiInput.focus();}
+    });
+    dialog?.addEventListener('close', hidePicker);
+    dialog?.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && pickerRoot && !pickerRoot.hidden) {
+            event.preventDefault(); event.stopPropagation(); hidePicker(); pickerButton?.focus();
+        }
+    });
     const error = document.getElementById('sound-details-error');
     const title = document.getElementById('sound-details-name');
     const save = document.getElementById('save-sound-details') as HTMLButtonElement | null;
@@ -114,6 +156,7 @@ export const initSoundMetadata = (updated: () => void) => {
     document.addEventListener('click', event => {
         const button = event.target instanceof Element ? event.target.closest('[data-edit-description]') : null;
         if (!button || saving || button.closest('[inert]')) return;
+        hidePicker();
         name = button.getAttribute('data-edit-description') || '';
         title.textContent = name;
         input.value = metadata[name]?.description || '';
@@ -129,6 +172,7 @@ export const initSoundMetadata = (updated: () => void) => {
         event.preventDefault();
         if (saving) return;
         saving = true;
+        hidePicker();
         save.disabled = true;
         save.textContent = 'Saving…';
         error.textContent = '';

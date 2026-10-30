@@ -351,3 +351,14 @@ html.ui-preview #library-tools[hidden] { display: block !important; }
 #library-preview-status { margin-top: 0.5rem; font-size: 0.875rem; }
 
 #sound-details .emoji-label { margin-top: 0.75rem; }
+
+#choose-sound-emoji, #clear-sound-emoji { min-height: 44px; padding: 0.5rem 0.75rem; margin: 0 0.5rem 0.5rem 0; border: 1px solid #94a3b8; border-radius: 0.5rem; }
+#sound-emoji-picker { margin-bottom: 0.75rem; padding: 0.5rem; border: 1px solid var(--border); border-radius: 0.5rem; }
+.emoji-search { width: 100%; min-height: 44px; padding: 0.5rem; border: 1px solid #94a3b8; border-radius: 0.375rem; background: var(--card); color: var(--text); font-size: 1rem; }
+.emoji-picker-filters { display: flex; gap: 0.5rem; margin: 0.5rem 0; }
+.emoji-picker-filters select { flex: 1; min-width: 0; min-height: 44px; padding: 0.375rem; border: 1px solid #94a3b8; border-radius: 0.375rem; background: var(--card); color: var(--text); font: inherit; }
+.emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 0.25rem; max-height: min(14rem, 32dvh); overflow-y: auto; overscroll-behavior: contain; }
+.emoji-grid button { display: flex; align-items: center; justify-content: center; min-height: 44px; font-size: 1.75rem; border-radius: 0.375rem; }
+.emoji-grid button:hover { background: var(--border); }
+.emoji-grid img { width: 1.75rem; height: 1.75rem; }
+.emoji-grid button:focus-visible, #choose-sound-emoji:focus-visible, #clear-sound-emoji:focus-visible { outline: 2px solid #0284c7; outline-offset: -2px; }
