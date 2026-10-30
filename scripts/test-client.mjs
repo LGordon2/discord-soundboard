@@ -601,6 +601,38 @@ assert.equal(uploadName.value,'My upload');assert.ok(uploadAudio.src.startsWith(
 uploadAudio.duration=20;uploadAudio.dispatchEvent(new window.Event('loadedmetadata'));
 const clipStart=document.getElementById('clip-start'),clipEnd=document.getElementById('clip-end'),clipVolume=document.getElementById('clip-volume');
 assert.equal(clipEnd.value,'5');assert.equal(document.getElementById('upload-next').disabled,false);
+// Pointer coordinates are relative to the padded waveform viewport, not the
+// entire file. The viewport stays fixed during a gesture and fits on release.
+const trimViewport=document.getElementById('upload-waveform-viewport');
+trimViewport.getBoundingClientRect=()=>({left:100,width:400});
+const trimTimeline=document.getElementById('upload-timeline');
+const trimViewLabel=document.getElementById('clip-view-label');
+const sendTrimPointer=(target,type,x,id=1)=>{const event=new window.Event(type,{bubbles:true,cancelable:true});for(const [key,value]of Object.entries({clientX:x,pointerId:id,button:0,isPrimary:true}))Object.defineProperty(event,key,{value});target.dispatchEvent(event)};
+assert.equal(trimViewLabel.textContent,'0.00–10.00 s');
+sendTrimPointer(document.getElementById('clip-grab-end'),'pointerdown',300);
+sendTrimPointer(trimTimeline,'pointermove',140);
+assert.equal(Number(clipEnd.value),1);
+assert.equal(trimViewLabel.textContent,'0.00–10.00 s','zoom must not move the grabber during a drag');
+sendTrimPointer(trimTimeline,'pointerup',140);
+assert.equal(trimViewLabel.textContent,'0.00–2.00 s','shorter clip automatically zooms in');
+const fullPosition=document.getElementById('clip-position');fullPosition.value='2';fullPosition.dispatchEvent(new window.Event('input'));
+assert.equal(Number(clipStart.value),2);assert.equal(Number(clipEnd.value),3);
+sendTrimPointer(document.getElementById('clip-move'),'pointerdown',300);
+sendTrimPointer(trimTimeline,'pointermove',400);
+sendTrimPointer(trimTimeline,'pointerup',400);
+assert.equal(Number(clipStart.value),2.5);assert.equal(Number(clipEnd.value),3.5,'middle drag preserves duration');
+const trimArrow=new window.Event('keydown',{bubbles:true,cancelable:true});Object.defineProperty(trimArrow,'key',{value:'ArrowRight'});document.getElementById('clip-grab-start').dispatchEvent(trimArrow);
+assert.equal(Number(clipStart.value),2.51);assert.equal(trimArrow.defaultPrevented,true);
+assert.equal(document.getElementById('clip-grab-start').getAttribute('aria-valuenow'),'2.51');
+await click('#clip-show-all');assert.equal(trimViewLabel.textContent,'0.00–20.00 s');
+await click('#clip-fit');assert.notEqual(trimViewLabel.textContent,'0.00–20.00 s');
+sendTrimPointer(document.getElementById('clip-grab-end'),'pointerdown',300);
+sendTrimPointer(trimTimeline,'pointermove',350,2);
+assert.equal(Number(clipEnd.value),3.5,'unrelated pointers cannot change the selection');
+sendTrimPointer(trimTimeline,'pointercancel',300);
+assert.equal(trimTimeline.classList.contains('is-trimming'),false);
+console.log('PASS: edge grabbers, duration-preserving middle drag, stable gesture viewport, automatic zoom, overview navigation, keyboard controls, and pointer cancellation');
+
 clipStart.value='3';clipStart.dispatchEvent(new window.Event('input'));clipEnd.value='7';clipEnd.dispatchEvent(new window.Event('input'));
 clipVolume.value='40';clipVolume.dispatchEvent(new window.Event('input'));assert.equal(uploadAudio.volume,.4);
 uploadAudio.play=()=>{uploadAudio.dispatchEvent(new window.Event('playing'));return Promise.resolve()};uploadAudio.pause=()=>{};

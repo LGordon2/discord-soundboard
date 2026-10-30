@@ -220,3 +220,12 @@ against Discord's output limits. Temporary files are cleaned up on failure;
 completed files are published atomically without overwriting the library. The
 uploader and waveform editor load only when opened. Browser preview applies the
 same selection and volume before upload; waveform decoding stays local.
+
+The upload waveform has touch-sized edge grabbers and a draggable middle that
+moves the selected clip without changing its length. It automatically frames the
+selection with surrounding audio; shorter clips zoom in further. The view stays
+fixed throughout a drag and refits on release. **Position in full audio** navigates
+longer sources, **Full audio** shows the overview, and **Fit clip** restores the
+close view. **Precise start and end** retains the sliders. Grabbers support arrow
+keys (Shift for larger steps), Home and End. Cached waveform peaks are reused for
+zooming rather than decoding the file again.
