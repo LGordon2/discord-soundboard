@@ -327,7 +327,7 @@ func soundMetadataHandler(store *SoundMetadataStore, knownName func(string) bool
 }
 
 // Persist newly uploaded details before publishing them to in-memory readers.
-func (m *SoundMetadataStore) saveUploadedDetails(name, description, id, emoji string) error {
+func (m *SoundMetadataStore) saveUploadedDetails(name, description, id, emoji string, user uploadIdentity) error {
 	m.flushMu.Lock()
 	defer m.flushMu.Unlock()
 	m.mu.Lock()
@@ -341,6 +341,9 @@ func (m *SoundMetadataStore) saveUploadedDetails(name, description, id, emoji st
 		return err
 	}
 	if _, err = tx.Exec("INSERT OR IGNORE INTO sound_emoji_overrides(name) VALUES(?)", name); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("INSERT INTO sound_uploads(filename,uploader_id,uploader_name,uploaded_at) VALUES(?,?,?,?) ON CONFLICT(filename) DO UPDATE SET uploader_id=excluded.uploader_id,uploader_name=excluded.uploader_name,uploaded_at=excluded.uploaded_at", name+".mp3", user.ID, user.Username, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
 	if err = tx.Commit(); err != nil {

@@ -2,10 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,40 +25,6 @@ type soundLibrary struct {
 	uploads storedSoundMap
 }
 
-func loadUploadPassword(filename string) (string, error) {
-	if configured := os.Getenv("UPLOAD_PASSWORD"); configured != "" {
-		return configured, nil
-	}
-	if data, err := os.ReadFile(filename); err == nil {
-		if password := strings.TrimSpace(string(data)); len(password) >= 16 {
-			return password, nil
-		}
-		return "", fmt.Errorf("upload password file must contain at least 16 characters")
-	} else if !os.IsNotExist(err) {
-		return "", err
-	}
-	if err := os.MkdirAll(filepath.Dir(filename), 0700); err != nil {
-		return "", err
-	}
-	var random [24]byte
-	if _, err := rand.Read(random[:]); err != nil {
-		return "", err
-	}
-	password := base64.RawURLEncoding.EncodeToString(random[:])
-	file, err := os.OpenFile(filename, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		return "", err
-	}
-	_, err = file.WriteString(password + "\n")
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return "", err
-	}
-	return password, nil
-}
-
 func validUploadName(name string) bool {
 	if utf8.RuneCountInString(name) < 2 || utf8.RuneCountInString(name) > 32 || strings.HasPrefix(name, ".") || strings.ContainsAny(name, `/\`) {
 		return false
@@ -84,39 +46,93 @@ type audioProbe struct {
 	} `json:"streams"`
 }
 
-func probeUpload(ctx context.Context, filename string, limit float64) error {
+type uploadEdit struct {
+	Start, End, Volume float64
+	Trim               bool
+}
+
+func parseUploadEdit(r *http.Request) (uploadEdit, error) {
+	edit := uploadEdit{Volume: 1}
+	start, end, volume := r.FormValue("start"), r.FormValue("end"), r.FormValue("volume")
+	if volume != "" {
+		value, err := strconv.ParseFloat(volume, 64)
+		if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 || value > 1 {
+			return edit, fmt.Errorf("volume must be between 0 and 100 percent")
+		}
+		edit.Volume = value
+	}
+	if start != "" || end != "" {
+		var err error
+		edit.Start, err = strconv.ParseFloat(start, 64)
+		if err != nil {
+			return edit, fmt.Errorf("choose a valid clip start")
+		}
+		edit.End, err = strconv.ParseFloat(end, 64)
+		if err != nil {
+			return edit, fmt.Errorf("choose a valid clip end")
+		}
+		if math.IsNaN(edit.Start) || math.IsNaN(edit.End) || math.IsInf(edit.Start, 0) || math.IsInf(edit.End, 0) || edit.Start < 0 || edit.End <= edit.Start || edit.End-edit.Start > 5.000001 || edit.End > 120 {
+			return edit, fmt.Errorf("select a clip up to five seconds from audio up to two minutes")
+		}
+		edit.Trim = true
+	}
+	return edit, nil
+}
+func uploadAudioDuration(ctx context.Context, filename string, limit float64) (float64, error) {
 	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-show_entries", "format=duration:stream=codec_type", "-of", "json", filename)
 	data, err := cmd.Output()
 	if err != nil {
-		return fmt.Errorf("could not read audio; choose a valid MP3, Ogg, or WAV file")
+		return 0, fmt.Errorf("could not read audio; choose a valid MP3, Ogg, or WAV file")
 	}
 	var probe audioProbe
 	if json.Unmarshal(data, &probe) != nil {
-		return fmt.Errorf("could not read audio information")
+		return 0, fmt.Errorf("could not read audio information")
 	}
 	seconds, err := strconv.ParseFloat(probe.Format.Duration, 64)
 	if err != nil || math.IsNaN(seconds) || math.IsInf(seconds, 0) || seconds <= 0 || seconds > limit {
-		return fmt.Errorf("choose a clip no longer than five seconds")
+		return 0, fmt.Errorf("audio is longer than the allowed duration")
 	}
 	audio := false
 	for _, stream := range probe.Streams {
 		if stream.CodecType == "audio" {
 			audio = true
 		} else {
-			return fmt.Errorf("upload an audio-only file")
+			return 0, fmt.Errorf("upload an audio-only file")
 		}
 	}
 	if !audio {
-		return fmt.Errorf("file contains no audio")
+		return 0, fmt.Errorf("file contains no audio")
 	}
-	return nil
+	return seconds, nil
+}
+func probeUpload(ctx context.Context, filename string, limit float64) error {
+	_, err := uploadAudioDuration(ctx, filename, limit)
+	return err
 }
 func convertUpload(ctx context.Context, input, output string) error {
-	if err := probeUpload(ctx, input, 5.0); err != nil {
+	return convertUploadEdit(ctx, input, output, uploadEdit{Volume: 1})
+}
+func convertUploadEdit(ctx context.Context, input, output string, edit uploadEdit) error {
+	limit := 5.0
+	if edit.Trim {
+		limit = 120
+	}
+	duration, err := uploadAudioDuration(ctx, input, limit)
+	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-i", input, "-map", "0:a:0", "-vn", "-sn", "-dn", "-map_metadata", "-1", "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2", "-t", "5.1", "-f", "mp3", "-y", output)
-	if err := cmd.Run(); err != nil {
+	start, length := 0.0, duration
+	if edit.Trim {
+		if edit.End > duration+.025 {
+			return fmt.Errorf("selected clip ends after the audio")
+		}
+		start, length = edit.Start, math.Min(edit.End, duration)-edit.Start
+	}
+	if length <= 0 || length > 5.000001 {
+		return fmt.Errorf("select a clip up to five seconds")
+	}
+	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-ss", strconv.FormatFloat(start, 'f', 6, 64), "-i", input, "-map", "0:a:0", "-vn", "-sn", "-dn", "-map_metadata", "-1", "-t", strconv.FormatFloat(length, 'f', 6, 64), "-af", "volume=" + strconv.FormatFloat(edit.Volume, 'f', 6, 64), "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2", "-f", "mp3", "-y", output}
+	if err := exec.CommandContext(ctx, "ffmpeg", args...).Run(); err != nil {
 		return fmt.Errorf("audio conversion failed; try another file")
 	}
 	info, err := os.Stat(output)
@@ -128,12 +144,12 @@ func convertUpload(ctx context.Context, input, output string) error {
 
 type soundUploadHandler struct {
 	directory string
-	password  string
+	authorize func(*http.Request) (uploadIdentity, int)
 	metadata  *SoundMetadataStore
 	commitMu  *sync.Mutex
 	running   chan struct{}
 	publish   func(string, CreateSoundboardSoundRequest)
-	convert   func(context.Context, string, string) error
+	convert   func(context.Context, string, string, uploadEdit) error
 }
 
 func (h *soundUploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -143,15 +159,19 @@ func (h *soundUploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Use POST", 405)
 		return
 	}
-	if h.password == "" {
-		http.Error(w, "Uploads are unavailable", 503)
+	user, status := h.authorize(r)
+	if status != 0 {
+		message := "Sign in with Discord to upload sounds"
+		if status == 403 {
+			message = "This Discord account is not allowed to upload, or the session needs refreshing"
+		}
+		if status == 503 {
+			message = "Discord upload login is not configured"
+		}
+		http.Error(w, message, status)
 		return
 	}
-	expected, provided := sha256.Sum256([]byte(h.password)), sha256.Sum256([]byte(r.Header.Get("X-Upload-Password")))
-	if subtle.ConstantTimeCompare(expected[:], provided[:]) != 1 {
-		http.Error(w, "Incorrect upload password", 401)
-		return
-	}
+
 	select {
 	case h.running <- struct{}{}:
 		defer func() { <-h.running }()
@@ -180,6 +200,11 @@ func (h *soundUploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	id, emoji, err := parseEditedEmoji(r.FormValue("emoji"))
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	edit, err := parseUploadEdit(r)
 	if err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -219,13 +244,17 @@ func (h *soundUploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if err := h.convert(ctx, input, output); err != nil {
+	if err := h.convert(ctx, input, output, edit); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
 	}
 	data, err := os.ReadFile(output)
 	if err != nil || len(data) == 0 || len(data) > 512*1024 {
 		http.Error(w, "Could not prepare converted audio", 500)
+		return
+	}
+	if _, status := h.authorize(r); status != 0 {
+		http.Error(w, "Your upload access changed. Sign in again or contact the site owner.", status)
 		return
 	}
 	prepared := prepareSoundboardSound(name, "audio/mpeg", data)
@@ -250,7 +279,7 @@ func (h *soundUploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not save sound; the name may already exist", 409)
 		return
 	}
-	if err := h.metadata.saveUploadedDetails(name, description, id, emoji); err != nil {
+	if err := h.metadata.saveUploadedDetails(name, description, id, emoji, user); err != nil {
 		os.Remove(target)
 		http.Error(w, "Could not save sound details", 500)
 		return

@@ -72,7 +72,7 @@ type SoundboardSound struct {
 }
 
 var (
-	clientID     string // these are TODO, but unused.
+	clientID     string // OAuth application credentials for uploader identity.
 	clientSecret string
 	authToken    string // grab from a discord API call
 	soundsDir    string // where you store sounds on the server (e.g. /home/user/sounds/...)
@@ -313,15 +313,30 @@ func main() {
 		return &buf
 	}
 
-	passwordFile := os.Getenv("UPLOAD_PASSWORD_FILE")
-	if passwordFile == "" {
-		passwordFile = filepath.Join(filepath.Dir(databaseFile), "upload-password")
+	allowlistFile := os.Getenv("UPLOAD_ALLOWLIST_FILE")
+	if allowlistFile == "" {
+		allowlistFile = filepath.Join(filepath.Dir(databaseFile), "upload-allowlist")
 	}
-	uploadPassword, uploadPasswordErr := loadUploadPassword(passwordFile)
-	if uploadPasswordErr != nil {
-		log.Printf("[warn] uploads unavailable: %v", uploadPasswordErr)
+	if file, err := os.OpenFile(allowlistFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600); err == nil {
+		file.Close()
+	} else if !os.IsExist(err) {
+		log.Printf("[warn] could not initialize upload allowlist: %v", err)
 	}
-	http.Handle("/upload-sound", &soundUploadHandler{directory: soundsDir, password: uploadPassword, metadata: metadata, commitMu: &libraryMu, running: make(chan struct{}, 1), convert: convertUpload, publish: func(filename string, request CreateSoundboardSoundRequest) {
+	redirectURI := os.Getenv("DISCORD_REDIRECT_URI")
+	if redirectURI == "" {
+		redirectURI = "https://discord-soundboard.lewgordon.com/auth/discord/callback"
+	}
+	oauthID, oauthSecret := os.Getenv("DISCORD_CLIENT_ID"), os.Getenv("DISCORD_CLIENT_SECRET")
+	if oauthID == "" {
+		oauthID = clientID
+	}
+	if oauthSecret == "" {
+		oauthSecret = clientSecret
+	}
+	uploadLogin := &uploadAuth{db: database, clientID: oauthID, clientSecret: oauthSecret, redirectURI: redirectURI, allowlistFile: allowlistFile, allowedIDs: os.Getenv("UPLOAD_ALLOWED_USER_IDS"), client: &http.Client{Timeout: 15 * time.Second}, tokenURL: "https://discord.com/api/oauth2/token", userURL: "https://discord.com/api/v10/users/@me", authorizeURL: "https://discord.com/oauth2/authorize", now: time.Now}
+	uploadLogin.register(http.DefaultServeMux)
+
+	http.Handle("/upload-sound", &soundUploadHandler{directory: soundsDir, authorize: uploadLogin.authorize, metadata: metadata, commitMu: &libraryMu, running: make(chan struct{}, 1), convert: convertUploadEdit, publish: func(filename string, request CreateSoundboardSoundRequest) {
 		old := library.Load()
 		files := append(append([]string{}, old.files...), filename)
 		sort.Slice(files, func(i, j int) bool { return strings.ToLower(files[i]) < strings.ToLower(files[j]) })
@@ -573,56 +588,8 @@ func main() {
 		}
 		return described
 	})
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		code := r.URL.Query().Get("code")
+	http.Handle("/", staticFiles)
 
-		if code != "" {
-			var buf bytes.Buffer
-			buf.WriteString("grant_type=authorization_code&code=" + code + "&redirect_uri=http://localhost:3000")
-			req, err := http.NewRequest(http.MethodPost, "https://discord.com/api/oauth2/token", &buf)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] %v", err)
-				return
-			}
-			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			req.SetBasicAuth(clientID, clientSecret)
-
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] %v", err)
-				return
-			}
-			if resp.StatusCode != http.StatusOK {
-				data, _ := io.ReadAll(resp.Body)
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] invalid status code %v %v", resp.StatusCode, string(data))
-				return
-			}
-
-			var m map[string]interface{}
-			err = json.NewDecoder(resp.Body).Decode(&m)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] %v", err)
-				return
-			}
-
-			fmt.Println(m)
-			discordClient = NewDiscordRestClient(m["access_token"].(string), "Bearer")
-			r2, err := http.NewRequest("GET", "/", nil)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprintf(w, "[error] %v", err)
-				return
-			}
-			http.Redirect(w, r2, "/", http.StatusFound)
-			return
-		}
-
-		staticFiles.ServeHTTP(w, r)
-	})
 	trackedSwaps := &trackedSwapHandler{
 		state: sharedSwitches,
 		board: func() [soundboardSoundCount]SoundboardSound {

@@ -189,24 +189,34 @@ separate lazy-loaded local JavaScript chunk, with no external picker scripts or
 emoji image sheets. Unicode/custom values can still be pasted directly.
 
 Enable **Preview new UI**, then **Upload sound**, to add a clip to the server
-library. Choose/drop MP3, Ogg, or WAV audio, preview it locally, and enter a unique
-2–32 character name, description, optional emoji, and the shared upload password.
-Source clips must be no longer than five seconds and at most 10 MiB. FFprobe
-validates the audio; FFmpeg prepares a 128 kbps stereo MP3 before publication.
-The converted file is checked against Discord's size/duration limits. Files with
-existing MP3/Ogg names are rejected. Successful uploads update all connected
-libraries and their prepared upload cache, then use the usual + / Choose slot
-flow to send the sound to Discord. Uploading to the library does not create a
-Discord sound automatically. There is no visual trimmer in this first version.
+library. Sign in with Discord, choose/drop MP3/Ogg/WAV audio (up to two minutes
+and 10 MiB), select up to five seconds on the waveform/range controls, adjust
+volume, and preview that selection. Continue to name, description and emoji before
+saving. The server validates and applies the trim/volume using FFmpeg and stores
+an optimized MP3. File names remain unique, and connected viewers receive the new
+library entry. Existing shared credentials continue to handle Discord slot uploads.
 
-The service needs `ffmpeg` (with `libmp3lame`) and `ffprobe` on PATH. Only one
-upload/conversion is processed at a time, with a 30-second processing timeout.
-The UI module loads on demand. File and metadata failures clean up pending files;
-completed files are published atomically and existing sounds are not overwritten.
+Upload access uses Discord OAuth2 `identify`, not a shared password. Configure
+`DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` (existing `CLIENT_ID` / `CLIENT_SECRET`
+are supported as fallbacks). Register this callback in the application's OAuth2
+redirects: `https://discord-soundboard.lewgordon.com/auth/discord/callback`.
+`DISCORD_REDIRECT_URI` can override it for another deployment.
 
-Set `UPLOAD_PASSWORD` or `UPLOAD_PASSWORD_FILE` in the service environment to
-configure upload access. Otherwise the service generates a random password in
-`data/upload-password` (next to the SQLite file), with owner-only permissions.
-Read that local file to obtain the shared password. It is never returned by the
-web API or stored in browser localStorage; the form remembers it only in the
-current page. Password checks happen before multipart parsing or audio work.
+Set `UPLOAD_ALLOWED_USER_IDS` to comma-separated Discord IDs, or add IDs one per
+line to `data/upload-allowlist` next to SQLite (`UPLOAD_ALLOWLIST_FILE` overrides
+the path). The default allowlist is empty. File changes take effect without a
+restart, including removal of access from existing sessions. Login shows the
+user's Discord ID even if they are not approved, so it can be added to the list.
+
+Sessions use HttpOnly, Secure, SameSite cookies, with hashed session tokens stored
+in SQLite and a seven-day expiry. Uploads and logout require a session CSRF token.
+Discord access tokens are used only to verify identity and are not retained.
+The uploader ID/name and upload time are saved in `sound_uploads`. The old password
+is no longer accepted. Login does not replace the shared Discord account.
+
+The service requires `ffmpeg` (with `libmp3lame`) and `ffprobe` on PATH. One
+conversion runs at a time with a 30-second timeout. Uploaded clips are rechecked
+against Discord's output limits. Temporary files are cleaned up on failure;
+completed files are published atomically without overwriting the library. The
+uploader and waveform editor load only when opened. Browser preview applies the
+same selection and volume before upload; waveform decoding stays local.

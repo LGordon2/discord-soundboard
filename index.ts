@@ -387,7 +387,7 @@ let uploadReady: Promise<() => void> | undefined;
 document.getElementById('open-sound-upload')?.addEventListener('click', async () => {
     if (!document.body.classList.contains('ui-preview')) return;
     try {
-        uploadReady ||= import('./sound-upload').then(module => module.initSoundUpload());
+        uploadReady ||= import('./sound-upload').then(module => module.initSoundUpload(() => {stopLibraryPreview();stopBoardPreviews();}));
         const open = await uploadReady;
         open();
     } catch {
@@ -396,6 +396,9 @@ document.getElementById('open-sound-upload')?.addEventListener('click', async ()
         if (status) {status.hidden = false; status.textContent = 'Could not load the uploader. Try again.';}
     }
 });
+if (new URL(window.location.href).searchParams.has('upload_login') && document.body.classList.contains('ui-preview')) {
+    document.getElementById('open-sound-upload')?.click();
+}
 enableDragDropTouch();
 connectBoard({
     hydrate,

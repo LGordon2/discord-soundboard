@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS analytics_state (
 CREATE TABLE IF NOT EXISTS sound_counts (
  name TEXT PRIMARY KEY, added INTEGER NOT NULL DEFAULT 0 CHECK(added>=0),
  sent INTEGER NOT NULL DEFAULT 0 CHECK(sent>=0), played INTEGER NOT NULL DEFAULT 0 CHECK(played>=0));
+CREATE TABLE IF NOT EXISTS upload_sessions (
+ token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, username TEXT NOT NULL, csrf TEXT NOT NULL, expires INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS sound_uploads (
+ filename TEXT PRIMARY KEY, uploader_id TEXT NOT NULL, uploader_name TEXT NOT NULL, uploaded_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sound_emoji_overrides (name TEXT PRIMARY KEY);
 CREATE TABLE IF NOT EXISTS sound_metadata (
  name TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', emoji_id TEXT NOT NULL DEFAULT '', emoji_name TEXT NOT NULL DEFAULT '');
