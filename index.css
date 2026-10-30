@@ -26,20 +26,21 @@ img { max-width: 100%; height: auto; }
 .add-sound-component { height: 3rem; min-width: 18rem; max-width: 24rem; }
 .sound-header { display: flex; align-items: center; min-width: 0; }
 .sound-title { flex: 1 1 0%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.25rem; font-weight: 700; }
-.sound-card .sound-title { margin-bottom: 0.5rem; letter-spacing: -0.025em; }
+.sound-card .sound-title { margin-bottom: 0; letter-spacing: -0.025em; }
 .library-title { max-width: 15rem; }
 .sound-control { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .control-icon { width: 2rem; height: 2rem; }
 .control-icon-small { width: 1.5rem; height: 1.5rem; }
 .sound-save, .sound-download { color: #3b82f6; }
-.sound-card .sound-header { gap: 0.25rem; }
+.sound-card .sound-header { gap: 0.125rem; padding-bottom: 0.5rem; }
 .sound-card .sound-header > .sound-control,
 .sound-card .sound-header > .sound-details-button {
-    width: 2rem;
-    height: 2rem;
+    width: 1.75rem;
+    height: 1.75rem;
     margin: 0;
     align-self: center;
 }
+.sound-card .sound-header > .sound-control svg { width: 1.5rem; height: 1.5rem; }
 .sound-actions { display: flex; border-top: 1px solid var(--divider); }
 .sound-actions > .sound-control { flex: 1 1 0%; margin-top: 0.25rem; }
 .sound-actions > .sound-control + .sound-control { border-left: 1px solid var(--divider); }
@@ -246,11 +247,12 @@ button[aria-busy="true"] { opacity: 0.5; cursor: progress; }
 }
 
 .ui-preview .sound-card { display: flex; flex-direction: column; height: 6rem; min-height: 6rem; }
-.ui-preview .sound-card.has-description { height: 8.25rem; min-height: 8.25rem; }
+.ui-preview .sound-card.has-description { height: 7.75rem; min-height: 7.75rem; }
 .ui-preview .sound-card .sound-actions { margin-top: auto; min-height: 2.5rem; }
 .sound-empty { flex: 1; }
-.ui-preview .sound-card .sound-title { margin-bottom: 0.125rem; }
-.sound-card .sound-description { margin-top: 0; padding-top: 0; padding-bottom: 0.125rem; line-height: 1.35; }
+.ui-preview .sound-card .sound-title { margin-bottom: 0; }
+.ui-preview .sound-card.has-description .sound-header { padding-bottom: 0.25rem; }
+.sound-card .sound-description { margin-top: 0; padding-top: 0; padding-bottom: 0; line-height: 1.35; }
 
 
 /* Reserve the first viewport until the initial atomic WebSocket snapshot lands. */
@@ -279,7 +281,7 @@ html.ui-preview #library-tools[hidden] { display: block !important; }
         justify-content: center;
     }
     html.ui-preview #playable-sounds .sound-card { height: auto; min-height: 7.5rem; }
-    html.ui-preview #playable-sounds .sound-card.has-description { min-height: 9.5rem; }
+    html.ui-preview #playable-sounds .sound-card.has-description { min-height: 9rem; }
     html.ui-preview .sound-actions { gap: 0.25rem; }
     html.ui-preview .library-tools {
         position: sticky;
@@ -347,6 +349,17 @@ html.ui-preview #library-tools[hidden] { display: block !important; }
     color: #eab308;
 }
 .library-preview-button svg { width: 1.5rem; height: 1.5rem; }
+/* Keep library actions compact and evenly spaced so names get the remaining width. */
+.add-sound-component .sound-header { gap: 0.125rem; }
+.add-sound-component .library-title { max-width: none; }
+.add-sound-component .sound-header > .sound-control,
+.add-sound-component .sound-header > .sound-details-button {
+    width: 1.75rem;
+    height: 1.75rem;
+    margin: 0;
+    align-self: center;
+}
+.add-sound-component .sound-header > .sound-control svg { width: 1.5rem; height: 1.5rem; }
 .library-preview-button:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
 #library-preview-status { margin-top: 0.5rem; font-size: 0.875rem; }
 
@@ -363,7 +376,7 @@ html.ui-preview #library-tools[hidden] { display: block !important; }
 .emoji-grid img { width: 1.75rem; height: 1.75rem; }
 .emoji-grid button:focus-visible, #choose-sound-emoji:focus-visible, #clear-sound-emoji:focus-visible { outline: 2px solid #0284c7; outline-offset: -2px; }
 
-#open-sound-upload { float: right; min-height: 44px; padding: 0.5rem 0.75rem; margin: 0 0 0.5rem 0.5rem; border: 1px solid #0284c7; border-radius: 0.5rem; color: #0284c7; }
+#open-sound-upload { float: right; min-height: 44px; padding: 0.5rem 0.75rem; margin: 0 0 0.5rem 0.5rem; border: 1px solid #0284c7; border-radius: 0.5rem; color: #0369a1; }
 #upload-status { clear: both; font-size: 0.875rem; margin-bottom: 0.5rem; }
 #sound-upload { width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 1.25rem; border: 0; border-radius: 0.75rem; background: var(--card); color: var(--text); }
 #sound-upload:not([open]) { display: none; }
@@ -471,3 +484,7 @@ html.ui-preview #playable-sounds { margin-top: 0; }
 .emoji-choice { display: inline-flex; align-items: center; gap: 0.5rem; vertical-align: middle; }
 .emoji-choice > span:first-child:not(:last-child) { display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; font-size: 1.25rem; line-height: 1; }
 .emoji-choice img { width: 1.25rem; height: 1.25rem; object-fit: contain; }
+
+@media (prefers-color-scheme: dark) {
+    #open-sound-upload { color: #7dd3fc; border-color: #38bdf8; }
+}

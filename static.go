@@ -25,7 +25,7 @@ func staticHandler(directory string, initialDescriptions ...func() [soundboardSo
 				var layout strings.Builder
 				for slot, described := range initialDescriptions[0]() {
 					if described {
-						fmt.Fprintf(&layout, "html.ui-preview #soundboard-%d{height:8.25rem;min-height:8.25rem}", slot)
+						fmt.Fprintf(&layout, "html.ui-preview #soundboard-%d{height:7.75rem;min-height:7.75rem}", slot)
 					}
 				}
 				if layout.Len() > 0 {

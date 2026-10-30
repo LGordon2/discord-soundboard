@@ -260,3 +260,19 @@ current bucket is partial. Refresh to include new events.
 The charts page lives at `/analytics`; `/analytics/data` serves its JSON snapshot
 with the same login and upload-allowlist checks. Only the owner can use `/admin`
 to rename or delete sounds.
+
+## Browser security policy
+
+The HTTP server applies CSP, HSTS (one year, including subdomains), COOP
+`same-origin`, frame denial, and MIME sniffing protection to all routes. CSP
+permits local scripts and hashes of the shipped inline bootstrap/admin/analytics
+scripts; Discord CDN images/audio and local blob audio remain available. Inline
+styles remain permitted for layout hints, waveform controls, and chart sizing.
+Build the frontend before starting/restarting the backend: bootstrap hashes are
+read from `dist/index.html` at startup. Deploy assets and restart together.
+
+Trusted Types enforcement is not enabled: the current client renders escaped HTML
+fragments through DOM HTML sinks and needs a separate migration before enforcement.
+The policy blocks unapproved third-party scripts; verify browser DevTools after
+deployment to identify any remaining third-party-cookie issues. Lighthouse scores
+must be measured again against the deployed service.

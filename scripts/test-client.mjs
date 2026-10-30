@@ -12,7 +12,7 @@ for (const input of document.querySelectorAll('input')) input.checked=false;
 Object.defineProperty(window.HTMLElement.prototype,'inert',{get(){return this.hasAttribute('inert')},set(value){if(value)this.setAttribute('inert','');else this.removeAttribute('inert')}});
 const initialLayout=document.createElement('style');
 initialLayout.id='initial-card-layout';
-initialLayout.textContent='html.ui-preview #soundboard-0{height:8.25rem;min-height:8.25rem}';
+initialLayout.textContent='html.ui-preview #soundboard-0{height:7.75rem;min-height:7.75rem}';
 document.head.append(initialLayout);
 const preferences=new Map();
 window.localStorage={getItem:key=>preferences.get(key)??null,setItem:(key,value)=>preferences.set(key,value)};
@@ -672,7 +672,14 @@ assert.equal(uploadDialog.hasAttribute('open'),false);assert.ok(document.getElem
 assert.equal(calls.filter(call=>call.url==='/swap-sound').length,beforeUploadSwaps,'upload only saves to library');
 await click('#open-sound-upload');uploadFile.files=[new File(['not audio'],'document.txt')];uploadFile.dispatchEvent(new window.Event('change'));assert.ok(document.getElementById('upload-error').textContent.includes('MP3, Ogg, or WAV'));assert.equal(document.getElementById('upload-file-step').hidden,false);assert.equal(document.getElementById('upload-next').disabled,true);uploadFile.files=[{name:'large.wav',size:11*1024*1024}];uploadFile.dispatchEvent(new window.Event('change'));
 assert.ok(document.getElementById('upload-error').textContent.includes('under 10 MB'));assert.equal(uploadAudio.hidden,true);
-const drop=new window.Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(drop,'dataTransfer',{value:{files:[new File(['audio'],'Dropped clip.ogg',{type:'audio/ogg'})]}});
+for (const extension of ['oga','OGA']) {
+    uploadFile.files=[new File(['audio'],`Selected clip.${extension}`,{type:'audio/ogg'})];
+    uploadFile.dispatchEvent(new window.Event('change'));
+    assert.equal(document.getElementById('upload-error').textContent,'');
+    assert.equal(document.getElementById('upload-edit-step').hidden,false);
+    assert.ok(uploadAudio.src,'Oga selection should load the audio preview');
+}
+const drop=new window.Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(drop,'dataTransfer',{value:{files:[new File(['audio'],'Dropped clip.oga',{type:'audio/ogg'})]}});
 document.getElementById('upload-dropzone').dispatchEvent(drop);assert.equal(uploadName.value,'Dropped clip');assert.equal(document.getElementById('upload-edit-step').hidden,false);
 await click('#cancel-sound-upload');assert.equal(uploadAudio.hidden,true);assert.equal(uploadDialog.hasAttribute('open'),false);
 mobileToggle.checked=false;mobileToggle.dispatchEvent(new window.Event('change'));await click('#open-sound-upload');assert.equal(uploadDialog.hasAttribute('open'),false);

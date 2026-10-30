@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -43,7 +45,12 @@ type audioProbe struct {
 		Name     string `json:"format_name"`
 	} `json:"format"`
 	Streams []struct {
-		CodecType string `json:"codec_type"`
+		Index       int    `json:"index"`
+		CodecName   string `json:"codec_name"`
+		CodecType   string `json:"codec_type"`
+		Disposition struct {
+			AttachedPic int `json:"attached_pic"`
+		} `json:"disposition"`
 	} `json:"streams"`
 }
 
@@ -79,16 +86,26 @@ func parseUploadEdit(r *http.Request) (uploadEdit, error) {
 	}
 	return edit, nil
 }
-func uploadAudioDuration(ctx context.Context, filename string, limit float64) (float64, error) {
-	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-show_entries", "format=format_name,duration:stream=codec_type", "-of", "json", filename)
+func uploadAudioDuration(ctx context.Context, filename string, limit float64) (duration float64, resultErr error) {
+	defer func() {
+		if resultErr != nil {
+			log.Printf("[sound-upload] probe rejected file=%q limit_seconds=%g reason=%q", filename, limit, resultErr.Error())
+		}
+	}()
+	cmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-show_entries", "format=format_name,duration:stream=index,codec_name,codec_type:stream_disposition=attached_pic", "-of", "json", filename)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	data, err := cmd.Output()
 	if err != nil {
+		log.Printf("[sound-upload] ffprobe failed file=%q error=%q stderr=%.2048q", filename, err, stderr.String())
 		return 0, fmt.Errorf("could not read audio; choose a valid MP3, Ogg, or WAV file")
 	}
 	var probe audioProbe
-	if json.Unmarshal(data, &probe) != nil {
+	if err := json.Unmarshal(data, &probe); err != nil {
+		log.Printf("[sound-upload] ffprobe invalid JSON file=%q error=%q", filename, err)
 		return 0, fmt.Errorf("could not read audio information")
 	}
+	log.Printf("[sound-upload] probe file=%q format=%q duration=%q limit_seconds=%g streams=%+v", filename, probe.Format.Name, probe.Format.Duration, limit, probe.Streams)
 	switch probe.Format.Name {
 	case "mp3", "ogg", "wav":
 	default:
@@ -102,7 +119,7 @@ func uploadAudioDuration(ctx context.Context, filename string, limit float64) (f
 	for _, stream := range probe.Streams {
 		if stream.CodecType == "audio" {
 			audio = true
-		} else {
+		} else if stream.CodecType != "video" || stream.Disposition.AttachedPic != 1 {
 			return 0, fmt.Errorf("upload an audio-only file")
 		}
 	}
@@ -138,7 +155,12 @@ func convertUploadEdit(ctx context.Context, input, output string, edit uploadEdi
 		return fmt.Errorf("select a clip up to five seconds")
 	}
 	args := []string{"-nostdin", "-hide_banner", "-loglevel", "error", "-xerror", "-protocol_whitelist", "file,pipe", "-format_whitelist", "mp3,ogg,wav", "-ss", strconv.FormatFloat(start, 'f', 6, 64), "-i", input, "-map", "0:a:0", "-vn", "-sn", "-dn", "-map_metadata", "-1", "-t", strconv.FormatFloat(length, 'f', 6, 64), "-af", "volume=" + strconv.FormatFloat(edit.Volume, 'f', 6, 64), "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2", "-f", "mp3", "-y", output}
-	if err := exec.CommandContext(ctx, "ffmpeg", args...).Run(); err != nil {
+	log.Printf("[sound-upload] convert file=%q start_seconds=%g length_seconds=%g volume=%g", input, start, length, edit.Volume)
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		log.Printf("[sound-upload] ffmpeg failed file=%q error=%q stderr=%.2048q", input, err, stderr.String())
 		return fmt.Errorf("audio conversion failed; try another file")
 	}
 	info, err := os.Stat(output)
@@ -222,7 +244,8 @@ func (h *soundUploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer source.Close()
 	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if ext != ".mp3" && ext != ".ogg" && ext != ".wav" {
+	log.Printf("[sound-upload] received filename=%q extension=%q bytes=%d", header.Filename, ext, header.Size)
+	if ext != ".mp3" && ext != ".ogg" && ext != ".oga" && ext != ".wav" {
 		http.Error(w, "Choose MP3, Ogg, or WAV audio", 400)
 		return
 	}
@@ -251,6 +274,7 @@ func (h *soundUploadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	if err := h.convert(ctx, input, output, edit); err != nil {
+		log.Printf("[sound-upload] upload rejected filename=%q reason=%q", header.Filename, err.Error())
 		http.Error(w, err.Error(), 400)
 		return
 	}

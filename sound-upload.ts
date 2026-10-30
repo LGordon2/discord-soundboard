@@ -85,7 +85,7 @@ export const initSoundUpload = (stopOtherAudio: () => void = () => {}) => {
     file.addEventListener('change', () => {
         releaseAudio(); error.textContent = '';
         const selected = file.files?.[0]; if (!selected) {showStep(0);return;}
-        if (!/\.(mp3|ogg|wav)$/i.test(selected.name)) {error.textContent = 'Choose an MP3, Ogg, or WAV audio file.'; showStep(0); return;}
+        if (!/\.(mp3|ogg|oga|wav)$/i.test(selected.name)) {error.textContent = 'Choose an MP3, Ogg, or WAV audio file.'; showStep(0); return;}
         if (selected.size > 10 * 1024 * 1024) {error.textContent = 'Choose a file under 10 MB.'; return;}
         if (!name.value || name.value === automaticName) {
             automaticName = Array.from(selected.name.replace(/\.[^.]+$/, '').replace(/[\\/\x00-\x1f]/g, ' ').trim()).slice(0, 32).join('');

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -145,7 +146,7 @@ func TestUploadMP3AndOggInputs(t *testing.T) {
 	if err := os.WriteFile(input, wavClip(.1), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, test := range []struct{ ext, codec string }{{".mp3", "libmp3lame"}, {".ogg", "libvorbis"}} {
+	for _, test := range []struct{ ext, codec string }{{".mp3", "libmp3lame"}, {".ogg", "libvorbis"}, {".oga", "libvorbis"}, {".OGA", "libvorbis"}} {
 		t.Run(test.ext, func(t *testing.T) {
 			encoded := filepath.Join(t.TempDir(), "audio"+test.ext)
 			if err := exec.Command("ffmpeg", "-nostdin", "-loglevel", "error", "-i", input, "-c:a", test.codec, encoded).Run(); err != nil {
@@ -155,9 +156,66 @@ func TestUploadMP3AndOggInputs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			response := sendUpload(t, h, "test-user", "Input "+test.codec, "original"+test.ext, "", data)
+			response := sendUpload(t, h, "test-user", "Input "+test.ext[1:], "original"+test.ext, "", data)
 			if response.Code != 201 {
 				t.Fatalf("%s input rejected: %s", test.ext, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestUploadOggCoverArtAndVideo(t *testing.T) {
+	for _, program := range []string{"ffmpeg", "ffprobe"} {
+		if _, err := exec.LookPath(program); err != nil {
+			t.Skip(program + " unavailable")
+		}
+	}
+	dir := t.TempDir()
+	cover := filepath.Join(dir, "cover.jpg")
+	if data, err := exec.Command("ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "color=size=16x16", "-frames:v", "1", cover).CombinedOutput(); err != nil {
+		t.Fatalf("generate cover: %v: %s", err, data)
+	}
+	image, err := os.ReadFile(cover)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ogg stores cover art as a FLAC picture block in a Vorbis comment.
+	var picture bytes.Buffer
+	for _, value := range []uint32{3, 10} {
+		binary.Write(&picture, binary.BigEndian, value)
+	}
+	picture.WriteString("image/jpeg")
+	for _, value := range []uint32{0, 16, 16, 24, 0, uint32(len(image))} {
+		binary.Write(&picture, binary.BigEndian, value)
+	}
+	picture.Write(image)
+	h := testUploadHandler(t)
+	for _, test := range []struct {
+		name   string
+		args   []string
+		status int
+	}{
+		{"Cover art", []string{"-c:a", "libvorbis", "-metadata", "METADATA_BLOCK_PICTURE=" + base64.StdEncoding.EncodeToString(picture.Bytes())}, 201},
+		{"Video", []string{"-f", "lavfi", "-i", "color=size=64x64:duration=0.1", "-c:a", "libvorbis", "-c:v", "libtheora", "-shortest"}, 400},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			filename := filepath.Join(dir, test.name+".oga")
+			args := []string{"-nostdin", "-v", "error", "-f", "lavfi", "-i", "sine=duration=0.1"}
+			args = append(args, test.args...)
+			args = append(args, "-f", "ogg", filename)
+			if data, err := exec.Command("ffmpeg", args...).CombinedOutput(); err != nil {
+				t.Fatalf("generate Ogg: %v: %s", err, data)
+			}
+			data, err := os.ReadFile(filename)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := sendUpload(t, h, "test-user", test.name, "original.oga", "", data)
+			if response.Code != test.status {
+				t.Fatalf("status %d, want %d: %s", response.Code, test.status, response.Body.String())
+			}
+			if test.status == 400 && !strings.Contains(response.Body.String(), "audio-only") {
+				t.Fatalf("expected video rejection: %s", response.Body.String())
 			}
 		})
 	}
@@ -334,7 +392,7 @@ func TestUploadRejectsDisguisedNonAudio(t *testing.T) {
 	h := testUploadHandler(t)
 	published := false
 	h.publish = func(string, CreateSoundboardSoundRequest) { published = true }
-	for _, ext := range []string{".mp3", ".ogg", ".wav"} {
+	for _, ext := range []string{".mp3", ".ogg", ".oga", ".wav"} {
 		for _, test := range []struct {
 			name string
 			data []byte

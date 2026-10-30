@@ -64,7 +64,7 @@ func TestInitialDescriptionLayoutAndConditionalRevalidation(t *testing.T) {
 	handler := staticHandler(root, func() [soundboardSoundCount]bool { return described })
 	first := httptest.NewRecorder()
 	handler.ServeHTTP(first, httptest.NewRequest("GET", "/", nil))
-	if !strings.Contains(first.Body.String(), "#soundboard-2{height:8.25rem") || strings.Contains(first.Body.String(), "#soundboard-0{") {
+	if !strings.Contains(first.Body.String(), "#soundboard-2{height:7.75rem") || strings.Contains(first.Body.String(), "#soundboard-0{") {
 		t.Fatalf("wrong layout hint: %s", first.Body.String())
 	}
 	etag := first.Header().Get("ETag")

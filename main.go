@@ -753,7 +753,7 @@ func main() {
 	go func() {
 		port := "3000"
 		fmt.Printf("starting http server on localhost:%s...\n", port)
-		err := http.ListenAndServe("0.0.0.0:"+port, http.DefaultServeMux)
+		err := http.ListenAndServe("0.0.0.0:"+port, securityHeaders(http.DefaultServeMux, "./dist"))
 		if err != nil {
 			panic(err)
 		}
