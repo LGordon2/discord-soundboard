@@ -144,7 +144,7 @@ func (c *DiscordRestClient) createSoundboardSound(guildId string, request Create
 		// A deleted/unavailable custom emoji must not prevent restoring the audio.
 		request.EmojiID, request.EmojiName = nil, nil
 		if c.metadata != nil {
-			c.metadata.SetEmoji(request.Name, nil, nil)
+			c.metadata.setEmoji(request.Name, nil, nil, true)
 		}
 		log.Printf("[warn] Discord rejected a stored emoji; retrying the sound upload without it")
 		resp, err = post()

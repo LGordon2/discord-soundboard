@@ -231,7 +231,7 @@ button[aria-busy="true"] { opacity: 0.5; cursor: progress; }
 #sound-details h2 { font-size: 1.25rem; font-weight: 700; }
 #sound-details-name { margin: 0.25rem 0 1rem; overflow-wrap: anywhere; color: #475569; }
 #sound-details label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
-#sound-description { width: 100%; padding: 0.75rem; border: 1px solid #94a3b8; border-radius: 0.5rem; background: inherit; color: inherit; }
+#sound-description, #sound-emoji { width: 100%; padding: 0.75rem; border: 1px solid #94a3b8; border-radius: 0.5rem; background: inherit; color: inherit; }
 .details-help { margin-top: 0.5rem; font-size: 0.75rem; color: #64748b; }
 #sound-details-error { color: #b91c1c; margin-top: 0.5rem; }
 .details-actions { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem; }
@@ -349,3 +349,5 @@ html.ui-preview #library-tools[hidden] { display: block !important; }
 .library-preview-button svg { width: 1.5rem; height: 1.5rem; }
 .library-preview-button:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
 #library-preview-status { margin-top: 0.5rem; font-size: 0.875rem; }
+
+#sound-details .emoji-label { margin-top: 0.75rem; }

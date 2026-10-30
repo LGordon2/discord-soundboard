@@ -50,7 +50,16 @@ details.close=()=>details.removeAttribute('open');
 globalThis.fetch=async(url,options)=>{
  if(url==='/sound-metadata') {
   metadataCalls.push(options?.method||'GET');
-  if(options?.method==='PUT') {const input=JSON.parse(options.body);savedMetadata[input.soundName]={...savedMetadata[input.soundName],description:input.description}}
+  if(options?.method==='PUT') {
+   const input=JSON.parse(options.body);
+   if(input.emoji==='invalid text')return {ok:false,text:async()=> 'Use a Unicode emoji or custom emoji ID'};
+   savedMetadata[input.soundName]={...savedMetadata[input.soundName],description:input.description};
+   if(input.emoji!==undefined){delete savedMetadata[input.soundName].emoji_id;delete savedMetadata[input.soundName].emoji_name;
+    const custom=input.emoji.match(/^<a?:[^:]+:([0-9]+)>$/);
+    if(custom||/^[0-9]+$/.test(input.emoji))savedMetadata[input.soundName].emoji_id=custom?.[1]||input.emoji;
+    else if(input.emoji)savedMetadata[input.soundName].emoji_name=input.emoji;
+   }
+  }
   return {ok:true,json:async()=>structuredClone(savedMetadata)};
  }
  calls.push({url:String(url),...options});
@@ -493,3 +502,28 @@ assert.equal(slowBoardPreview.paused,true,'obsolete uploaded preview cannot star
 assert.equal(audios.at(-1).paused,false);
 audios.at(-1).emit('ended');
 console.log('PASS: uploaded and local previews stop each other, including delayed loading');
+
+wire({type:'board',slots:[],hasEmpty:true,library:[['Editable emoji','.ogg']]});
+await click('[data-edit-description="Editable emoji"]');
+const emojiEditor=document.getElementById('sound-emoji');
+assert.equal(emojiEditor.value,'');
+emojiEditor.value='🦆';
+const saveDetails=async()=>{document.getElementById('sound-details-form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));await new Promise(setImmediate)};
+await saveDetails();
+assert.equal(document.querySelector('[data-soundname="Editable emoji"] .sound-emoji').textContent,'🦆');
+await click('[data-edit-description="Editable emoji"]');
+assert.equal(emojiEditor.value,'🦆');
+emojiEditor.value='<:party:12345>';
+await saveDetails();
+assert.ok(document.querySelector('[data-soundname="Editable emoji"] .sound-emoji img').src.includes('/emojis/12345.webp'));
+await click('[data-edit-description="Editable emoji"]');
+assert.equal(emojiEditor.value,'12345');
+emojiEditor.value='invalid text';
+await saveDetails();
+assert.equal(details.hasAttribute('open'),true);
+assert.equal(document.getElementById('sound-details-error').textContent,'Use a Unicode emoji or custom emoji ID');
+emojiEditor.value='';
+await saveDetails();
+assert.equal(document.querySelector('[data-soundname="Editable emoji"] .sound-emoji'),null);
+assert.equal(details.hasAttribute('open'),false);
+console.log('PASS: emoji dialog prefill, Unicode/custom edits, removal, shared rendering, and validation errors');

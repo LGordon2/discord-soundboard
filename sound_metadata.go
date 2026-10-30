@@ -8,14 +8,18 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
 type SoundMetadata struct {
 	Description string `json:"description"`
+	emojiEdited bool
 	EmojiID     string `json:"emoji_id,omitempty"`
 	EmojiName   string `json:"emoji_name,omitempty"`
 }
@@ -41,7 +45,7 @@ type SoundMetadataStore struct {
 
 func newSoundMetadataStore(db *sql.DB) (*SoundMetadataStore, error) {
 	m := &SoundMetadataStore{db: db, data: soundMetadataFile{Version: 1, Sounds: make(map[string]SoundMetadata)}, dirty: make(map[string]uint64), stop: make(chan struct{}), done: make(chan struct{})}
-	rows, err := db.Query("SELECT name,description,emoji_id,emoji_name FROM sound_metadata")
+	rows, err := db.Query("SELECT m.name,m.description,m.emoji_id,m.emoji_name,o.name IS NOT NULL FROM sound_metadata m LEFT JOIN sound_emoji_overrides o ON o.name=m.name")
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +53,7 @@ func newSoundMetadataStore(db *sql.DB) (*SoundMetadataStore, error) {
 	for rows.Next() {
 		var name string
 		var entry SoundMetadata
-		if err := rows.Scan(&name, &entry.Description, &entry.EmojiID, &entry.EmojiName); err != nil {
+		if err := rows.Scan(&name, &entry.Description, &entry.EmojiID, &entry.EmojiName, &entry.emojiEdited); err != nil {
 			return nil, err
 		}
 		m.data.Sounds[name] = entry
@@ -119,6 +123,9 @@ func (m *SoundMetadataStore) SetDescription(name, description string) {
 	m.dirty[name] = m.version
 }
 func (m *SoundMetadataStore) SetEmoji(name string, id, emoji *string) bool {
+	return m.setEmoji(name, id, emoji, false)
+}
+func (m *SoundMetadataStore) setEmoji(name string, id, emoji *string, force bool) bool {
 	if name == "" {
 		return false
 	}
@@ -132,6 +139,9 @@ func (m *SoundMetadataStore) SetEmoji(name string, id, emoji *string) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	old := m.data.Sounds[name]
+	if old.emojiEdited && !force {
+		return false
+	}
 	if old.EmojiID == value.EmojiID && old.EmojiName == value.EmojiName {
 		return false
 	}
@@ -181,6 +191,11 @@ func (m *SoundMetadataStore) Flush() error {
 	}
 	defer statement.Close()
 	for name, entry := range changed {
+		if entry.emojiEdited {
+			if _, err = tx.Exec("INSERT OR IGNORE INTO sound_emoji_overrides(name) VALUES(?)", name); err != nil {
+				return err
+			}
+		}
 		if _, err = statement.Exec(name, entry.Description, entry.EmojiID, entry.EmojiName); err != nil {
 			return err
 		}
@@ -204,6 +219,59 @@ func (m *SoundMetadataStore) Close() error {
 	return m.Flush()
 }
 
+var customEmojiMarkup = regexp.MustCompile(`^<a?:[A-Za-z0-9_]{1,32}:([0-9]+)>$`)
+var customEmojiID = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
+
+func parseEditedEmoji(value string) (string, string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", "", nil
+	}
+	if match := customEmojiMarkup.FindStringSubmatch(value); match != nil {
+		value = match[1]
+	}
+	if customEmojiID.MatchString(value) {
+		if _, err := strconv.ParseUint(value, 10, 64); err == nil {
+			return value, "", nil
+		}
+	}
+	if utf8.RuneCountInString(value) <= 32 {
+		hasSymbol, valid := false, true
+		for _, r := range value {
+			switch {
+			case unicode.IsSymbol(r):
+				hasSymbol = true
+			case unicode.IsMark(r), r == '\u200d', r == '#', r == '*', r >= '0' && r <= '9':
+				if r == '\u20e3' {
+					hasSymbol = true
+				}
+			default:
+				valid = false
+			}
+		}
+		if valid && hasSymbol {
+			return "", value, nil
+		}
+	}
+	return "", "", fmt.Errorf("Use a Unicode emoji, Discord custom emoji ID, or <:name:id>; leave blank to remove")
+}
+func (m *SoundMetadataStore) editDetails(name, description string, editEmoji bool, id, emoji string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	entry := m.data.Sounds[name]
+	next := entry
+	next.Description = description
+	if editEmoji {
+		next.EmojiID, next.EmojiName, next.emojiEdited = id, emoji, true
+	}
+	if next == entry {
+		return
+	}
+	m.data.Sounds[name] = next
+	m.version++
+	m.dirty[name] = m.version
+}
+
 func soundMetadataHandler(store *SoundMetadataStore, knownName func(string) bool, changed func()) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodPut {
@@ -218,15 +286,25 @@ func soundMetadataHandler(store *SoundMetadataStore, knownName func(string) bool
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method == http.MethodPut {
 			input := struct {
-				SoundName   string `json:"soundName"`
-				Description string `json:"description"`
+				SoundName   string  `json:"soundName"`
+				Description string  `json:"description"`
+				Emoji       *string `json:"emoji"`
 			}{}
 			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16000))
 			if err := decoder.Decode(&input); err != nil || utf8.RuneCountInString(input.Description) > 2000 || !knownName(input.SoundName) {
 				http.Error(w, "Invalid sound or description (maximum 2000 characters)", 400)
 				return
 			}
-			store.SetDescription(input.SoundName, strings.TrimSpace(input.Description))
+			var id, emoji string
+			if input.Emoji != nil {
+				var err error
+				id, emoji, err = parseEditedEmoji(*input.Emoji)
+				if err != nil {
+					http.Error(w, err.Error(), 400)
+					return
+				}
+			}
+			store.editDetails(input.SoundName, strings.TrimSpace(input.Description), input.Emoji != nil, id, emoji)
 			if err := store.Flush(); err != nil {
 				log.Printf("[warn] saving description: %v", err)
 				http.Error(w, "Could not save sound details", 500)

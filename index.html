@@ -90,11 +90,14 @@
             <p id="sound-details-name"></p>
             <label for="sound-description">Description or source</label>
             <textarea id="sound-description" maxlength="2000" rows="5" placeholder="What is this sound? Where is it from?"></textarea>
+            <label class="emoji-label" for="sound-emoji">Emoji</label>
+            <input id="sound-emoji" type="text" maxlength="100" autocomplete="off" placeholder="😂 or <:name:123456789>" aria-describedby="sound-emoji-help">
+            <p id="sound-emoji-help" class="details-help">Paste an emoji or Discord custom emoji ID. Leave blank to remove. Shown here immediately and used on the next upload to Discord.</p>
             <p class="details-help">Saved on the server and shared with everyone using this soundboard.</p>
             <p id="sound-details-error" role="alert"></p>
             <div class="details-actions">
                 <button id="close-sound-details" type="button">Cancel</button>
-                <button id="save-sound-details" type="submit">Save description</button>
+                <button id="save-sound-details" type="submit">Save details</button>
             </div>
         </form>
     </dialog>

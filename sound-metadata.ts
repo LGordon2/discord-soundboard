@@ -69,8 +69,8 @@ export const decorateSoundMetadata = (root: ParentNode) => {
         edit.type = 'button';
         edit.className = 'sound-details-button';
         edit.setAttribute('data-edit-description', name);
-        edit.setAttribute('aria-label', `Edit description: ${name}`);
-        edit.title = 'Sound description and source';
+        edit.setAttribute('aria-label', `Edit sound details: ${name}`);
+        edit.title = 'Sound description and emoji';
         edit.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-9h.01"/></svg>';
         header.append(edit);
         card.removeAttribute('title');
@@ -103,11 +103,13 @@ export const initSoundMetadata = (updated: () => void) => {
     const dialog = document.getElementById('sound-details') as HTMLDialogElement | null;
     const form = document.getElementById('sound-details-form') as HTMLFormElement | null;
     const input = document.getElementById('sound-description') as HTMLTextAreaElement | null;
+    const emojiInput = document.getElementById('sound-emoji') as HTMLInputElement | null;
     const error = document.getElementById('sound-details-error');
     const title = document.getElementById('sound-details-name');
     const save = document.getElementById('save-sound-details') as HTMLButtonElement | null;
-    if (!dialog || !form || !input || !error || !title || !save) return;
+    if (!dialog || !form || !input || !emojiInput || !error || !title || !save) return;
     let name = '';
+    let initialEmoji = '';
     let saving = false;
     document.addEventListener('click', event => {
         const button = event.target instanceof Element ? event.target.closest('[data-edit-description]') : null;
@@ -115,6 +117,8 @@ export const initSoundMetadata = (updated: () => void) => {
         name = button.getAttribute('data-edit-description') || '';
         title.textContent = name;
         input.value = metadata[name]?.description || '';
+        initialEmoji = metadata[name]?.emoji_id || metadata[name]?.emoji_name || '';
+        emojiInput.value = initialEmoji;
         error.textContent = '';
         dialog.showModal();
         input.focus();
@@ -132,14 +136,14 @@ export const initSoundMetadata = (updated: () => void) => {
         try {
             const response = await fetch('/sound-metadata', {
                 method: 'PUT', headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ soundName: name, description: input.value }),
+                body: JSON.stringify({ soundName: name, description: input.value, ...(emojiInput.value !== initialEmoji ? {emoji: emojiInput.value} : {}) }),
                 signal: AbortSignal.timeout(10000),
             });
-            if (!response.ok) throw new Error('Save failed');
+            if (!response.ok) throw new Error((await response.text()).trim() || 'Could not save sound details.');
             applyMetadata(await response.json());
             dialog.close();
-        } catch { error.textContent = 'Could not save the description. Please try again.'; }
-        finally { saving = false; save.disabled = false; save.textContent = 'Save description'; }
+        } catch (failure) { error.textContent = failure instanceof Error ? failure.message : 'Could not save sound details. Please try again.'; }
+        finally { saving = false; save.disabled = false; save.textContent = 'Save details'; }
     });
     void refreshSoundMetadata();
 };

@@ -172,3 +172,11 @@ Actual playback increments the existing SQLite played counter and recent history
 failed/muted playback and fetching audio files alone do not count as plays.
 The `/library-audio?file=<filename>` endpoint supports GET/HEAD, seeking via byte
 ranges, and cache revalidation, and serves only regular Ogg/MP3 library files.
+
+The info dialog also edits emoji: paste a Unicode emoji, custom Discord emoji ID,
+or `<:name:id>` / `<a:name:id>`. Clear the field to remove it. Changes are shared
+immediately in this UI and used on the next Discord upload; an existing Discord
+sound is not reuploaded by editing details. Manual choices (including removal)
+are persisted in SQLite and protected from later Gateway snapshots. Editing only
+the description preserves automatic emoji synchronization. Invalid/unavailable
+custom emoji retain the existing upload retry without emoji.

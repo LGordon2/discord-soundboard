@@ -233,3 +233,123 @@ func TestMetadataETagRevalidationAndEdits(t *testing.T) {
 		t.Fatal("validator changed across reload")
 	}
 }
+
+func TestEmojiEditingPersistsAndSurvivesGatewaySnapshots(t *testing.T) {
+	db := testDatabase(t, filepath.Join(t.TempDir(), "emoji-edit.sqlite3"))
+	store, err := newSoundMetadataStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	oldEmoji := "😂"
+	store.SetEmoji("known", nil, &oldEmoji)
+	handler := soundMetadataHandler(store, func(name string) bool { return name == "known" }, nil)
+	update := func(body string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest("PUT", "/sound-metadata", strings.NewReader(body)))
+		return response
+	}
+	_, oldTag := store.representation()
+	if response := update(`{"soundName":"known","description":"Source","emoji":"👩🏽‍🚀"}`); response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	entry := store.Snapshot()["known"]
+	if entry.EmojiName != "👩🏽‍🚀" || entry.EmojiID != "" || !entry.emojiEdited {
+		t.Fatalf("wrong edit: %+v", entry)
+	}
+	if store.SetEmoji("known", nil, &oldEmoji) {
+		t.Fatal("Gateway overwrote user choice")
+	}
+	_, tag := store.representation()
+	if tag == oldTag {
+		t.Fatal("ETag not invalidated")
+	}
+	reloaded, err := newSoundMetadataStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reloaded.Close()
+	if !reloaded.Snapshot()["known"].emojiEdited || reloaded.SetEmoji("known", nil, &oldEmoji) {
+		t.Fatal("override not persisted")
+	}
+	request := reloaded.ApplyEmoji(CreateSoundboardSoundRequest{Name: "known"})
+	if request.EmojiName == nil || *request.EmojiName != "👩🏽‍🚀" {
+		t.Fatal("future upload lost edited emoji")
+	}
+	if response := update(`{"soundName":"known","description":"Source","emoji":"<a:party:12345>"}`); response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	entry = store.Snapshot()["known"]
+	if entry.EmojiID != "12345" || entry.EmojiName != "" {
+		t.Fatal("custom emoji not normalized")
+	}
+	if response := update(`{"soundName":"known","description":"Old client edit"}`); response.Code != 200 {
+		t.Fatal(response.Body.String())
+	}
+	if store.Snapshot()["known"].EmojiID != "12345" {
+		t.Fatal("description-only edit erased emoji")
+	}
+	for _, emoji := range []string{"hello", "<script>alert(1)</script>", "18446744073709551616", strings.Repeat("😂", 33)} {
+		body, _ := json.Marshal(map[string]string{"soundName": "known", "description": "should not apply", "emoji": emoji})
+		if update(string(body)).Code != 400 {
+			t.Fatalf("invalid emoji accepted: %q", emoji)
+		}
+		if store.Snapshot()["known"].Description != "Old client edit" {
+			t.Fatal("invalid emoji partially changed metadata")
+		}
+	}
+	if update(`{"soundName":"known","description":"Source","emoji":""}`).Code != 200 {
+		t.Fatal("clear failed")
+	}
+	entry = store.Snapshot()["known"]
+	if entry.EmojiID != "" || entry.EmojiName != "" || store.SetEmoji("known", nil, &oldEmoji) {
+		t.Fatal("explicit removal overwritten")
+	}
+	// A rejected user-selected custom emoji may still be cleared by upload fallback.
+	store.editDetails("known", "Source", true, "12345", "")
+	if !store.setEmoji("known", nil, nil, true) {
+		t.Fatal("rejected emoji fallback could not clear override")
+	}
+	if store.SetEmoji("known", nil, &oldEmoji) {
+		t.Fatal("fallback removal lost override")
+	}
+}
+
+func TestEditedEmojiInputs(t *testing.T) {
+	for _, value := range []string{"☕️", "1️⃣", "🇺🇸", "👍🏽", "👨‍👩‍👧‍👦"} {
+		id, emoji, err := parseEditedEmoji(value)
+		if err != nil || id != "" || emoji != value {
+			t.Fatalf("valid Unicode rejected: %s %v", value, err)
+		}
+	}
+}
+
+func TestEmojiOverrideSchemaUpgradePreservesMetadata(t *testing.T) {
+	db := testDatabase(t, filepath.Join(t.TempDir(), "old.sqlite3"))
+	if _, err := db.Exec("DROP TABLE sound_emoji_overrides"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("INSERT INTO sound_metadata(name,description,emoji_name) VALUES('old','Existing description','😂')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := initializeDatabase(db, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	store, err := newSoundMetadataStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	entry := store.Snapshot()["old"]
+	if entry.Description != "Existing description" || entry.EmojiName != "😂" || entry.emojiEdited {
+		t.Fatal("existing metadata changed during upgrade")
+	}
+	store.editDetails("old", entry.Description, true, "", "🦆")
+	if err := store.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM sound_emoji_overrides WHERE name='old'").Scan(&count); err != nil || count != 1 {
+		t.Fatal("new override did not persist")
+	}
+}
