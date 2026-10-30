@@ -24,8 +24,7 @@ img { max-width: 100%; height: auto; }
 .sound-card, .add-sound-component { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); margin: 0.5rem; padding: 0.5rem; border: 2px solid var(--border); border-radius: 0.5rem; background: var(--card); box-shadow: 0 1px 3px #0002; }
 .sound-card { width: 18rem; height: 6rem; }
 .add-sound-component { height: 3rem; min-width: 18rem; max-width: 24rem; }
-.sound-header { display: flex; align-items: flex-start; min-width: 0; }
-.add-sound-component .sound-header { align-items: center; }
+.sound-header { display: flex; align-items: center; min-width: 0; }
 .sound-title { flex: 1 1 0%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.25rem; font-weight: 700; }
 .sound-card .sound-title { margin-bottom: 0.5rem; letter-spacing: -0.025em; }
 .library-title { max-width: 15rem; }
@@ -33,7 +32,14 @@ img { max-width: 100%; height: auto; }
 .control-icon { width: 2rem; height: 2rem; }
 .control-icon-small { width: 1.5rem; height: 1.5rem; }
 .sound-save, .sound-download { color: #3b82f6; }
-.sound-download { margin-left: 0.25rem; }
+.sound-card .sound-header { gap: 0.25rem; }
+.sound-card .sound-header > .sound-control,
+.sound-card .sound-header > .sound-details-button {
+    width: 2rem;
+    height: 2rem;
+    margin: 0;
+    align-self: center;
+}
 .sound-actions { display: flex; border-top: 1px solid var(--divider); }
 .sound-actions > .sound-control { flex: 1 1 0%; margin-top: 0.25rem; }
 .sound-actions > .sound-control + .sound-control { border-left: 1px solid var(--divider); }
