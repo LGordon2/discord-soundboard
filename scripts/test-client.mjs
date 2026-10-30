@@ -566,3 +566,10 @@ const noMatch=picker.querySelector('.emoji-search');noMatch.value='nonexistent-e
 assert.equal(picker.querySelectorAll('.emoji-grid button').length,0);assert.ok(picker.textContent.includes('No matching emoji'));
 await click('#clear-sound-emoji');assert.equal(emojiEditor.value,'');assert.equal(picker.hidden,true);
 console.log('PASS: lazy emoji selector, search, categories, skin tones, known custom emoji, saving and removal');
+
+await click('#choose-sound-emoji');
+for(let i=0;i<30&&!picker.querySelector('.emoji-search');i++)await new Promise(setImmediate);
+const keyboardSearch=picker.querySelector('.emoji-search');keyboardSearch.value='rocket';keyboardSearch.dispatchEvent(new window.Event('input'));
+const enterEmoji=new window.Event('keydown',{bubbles:true,cancelable:true});Object.defineProperty(enterEmoji,'key',{value:'Enter'});keyboardSearch.dispatchEvent(enterEmoji);
+assert.equal(enterEmoji.defaultPrevented,true);assert.equal(emojiEditor.value,'🚀');assert.equal(details.hasAttribute('open'),true,'search Enter selects rather than submitting the form');
+console.log('PASS: Enter selects the searched emoji without submitting details');

@@ -47,6 +47,15 @@ export const mountEmojiPicker = (root: HTMLElement, custom: Choice[], choose: (v
         }));
         count.textContent = matches.length ? `${matches.length} emoji` : 'No matching emoji. Try another search or category.';
     };
+    search.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            grid.querySelector<HTMLButtonElement>('button')?.click();
+        } else if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            grid.querySelector<HTMLButtonElement>('button')?.focus();
+        }
+    });
     search.addEventListener('input', render); categories.addEventListener('change', render); tones.addEventListener('change', render);
     root.replaceChildren(search, filters, grid, count);
     // Select controls have their first option selected in browsers; set explicitly
