@@ -41,7 +41,7 @@ func TestNativeStoredAndEmptyCards(t *testing.T) {
 		t.Fatalf("incorrect empty card: %s", empty)
 	}
 	locked := soundCardComponent(0, "sound", "name", false, false, false, deleteButton("sound", "guild", "user", "", true))
-	if strings.Contains(locked, " droppable") || strings.Count(locked, `disabled="true"`) != 2 || !strings.Contains(locked, `data-guildid="guild" disabled`) {
+	if strings.Contains(locked, " droppable") || strings.Count(locked, `disabled="true"`) != 1 || strings.Contains(locked, `data-action="save"`) || !strings.Contains(locked, `sound-download`) || !strings.Contains(locked, `data-guildid="guild" disabled`) {
 		t.Fatalf("permissions not preserved: %s", locked)
 	}
 }

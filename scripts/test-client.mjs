@@ -303,6 +303,8 @@ wire({type:'switches',switches:{epoch:'json-server',version:1,pending:[{slot:3,n
 assert.equal(rendered.getAttribute('aria-busy'),'true');
 socket.onmessage({data:JSON.stringify({type:'board',slots:[{slot:3,id:'new-json-id',name:'Incoming',canRemove:true}],hasEmpty:true})+'\n'+JSON.stringify({type:'switches',switches:{epoch:'json-server',version:2,pending:[]}})+'\n'});
 assert.equal(document.getElementById('soundboard-3').getAttribute('data-soundid'),'new-json-id');
+assert.equal(document.querySelector('#soundboard-3 [data-action="save"]'),null);
+assert.ok(document.querySelector('#soundboard-3 .sound-download'),'download remains when save is ineligible');
 assert.equal(document.getElementById('soundboard-3').hasAttribute('aria-busy'),false);
 console.log('PASS: JSON slot events, permissions, escaping, viewer counts, and atomic shared loading completion');
 wire({type:'board',slots:[],hidden:['Already uploaded'],hasEmpty:true,library:[{name:'JSON & library <sound>',ext:'.ogg'},{name:'Already uploaded',ext:'.mp3'}]});
