@@ -43,6 +43,8 @@ globalThis.WebSocket=class {constructor(url){this.url=String(url);socket=this} c
 const calls=[];
 const metadataCalls=[];
 let failNextSwap=false;
+let holdNextUpload=false;
+let pendingUploadReply;
 let savedMetadata={Funny:{description:'From a TV cartoon',emoji_name:'😂'},'Next & Name':{description:'A classic quote',emoji_id:'12345'}};
 const details=document.getElementById('sound-details');
 details.showModal=()=>details.setAttribute('open','');
@@ -63,6 +65,7 @@ globalThis.fetch=async(url,options)=>{
   return {ok:true,json:async()=>structuredClone(savedMetadata)};
  }
  calls.push({url:String(url),...options});
+ if(url==='/upload-sound') {if(holdNextUpload){holdNextUpload=false;return new Promise(resolve=>{pendingUploadReply=resolve})}return {ok:true,json:async()=>({name:options.body.get('name')})}}
  if(url==='/swap-sound' && failNextSwap){failNextSwap=false;return {ok:false}}
  return {ok:true};
 };
@@ -573,3 +576,48 @@ const keyboardSearch=picker.querySelector('.emoji-search');keyboardSearch.value=
 const enterEmoji=new window.Event('keydown',{bubbles:true,cancelable:true});Object.defineProperty(enterEmoji,'key',{value:'Enter'});keyboardSearch.dispatchEvent(enterEmoji);
 assert.equal(enterEmoji.defaultPrevented,true);assert.equal(emojiEditor.value,'🚀');assert.equal(details.hasAttribute('open'),true,'search Enter selects rather than submitting the form');
 console.log('PASS: Enter selects the searched emoji without submitting details');
+
+const uploadDialog=document.getElementById('sound-upload');
+uploadDialog.showModal=()=>uploadDialog.setAttribute('open','');
+uploadDialog.close=()=>{uploadDialog.removeAttribute('open');uploadDialog.dispatchEvent(new window.Event('close'))};
+const uploadForm=document.getElementById('sound-upload-form');
+const uploadFile=document.getElementById('upload-file');
+const uploadName=document.getElementById('upload-name');
+const uploadDescription=document.getElementById('upload-description');
+const uploadEmoji=document.getElementById('upload-emoji');
+const uploadPassword=document.getElementById('upload-password');
+const uploadAudio=document.getElementById('upload-audio-preview');
+Object.defineProperty(uploadFile,'files',{value:[],writable:true,configurable:true});
+uploadForm.reset=()=>{for(const el of [uploadName,uploadDescription,uploadEmoji,uploadPassword])el.value='';uploadFile.files=[]};
+details.close();
+await click('#open-sound-upload');
+for(let i=0;i<100&&!uploadDialog.hasAttribute('open');i++)await new Promise(resolve=>setTimeout(resolve,10));
+assert.equal(uploadDialog.hasAttribute('open'),true);
+uploadFile.files=[new File(['sample audio'],'My upload.wav',{type:'audio/wav'})];
+uploadFile.dispatchEvent(new window.Event('change'));
+assert.equal(uploadName.value,'My upload');assert.ok(uploadAudio.src.startsWith('blob:'));assert.equal(uploadAudio.hidden,false);
+await click('#upload-choose-emoji');
+for(let i=0;i<30&&!document.querySelector('#upload-emoji-picker .emoji-search');i++)await new Promise(setImmediate);
+await click('#upload-emoji-picker [data-emoji-choice="🦆"]');assert.equal(uploadEmoji.value,'🦆');
+uploadDescription.value='A user uploaded clip';uploadPassword.value='test-password';
+const beforeUploadSwaps=calls.filter(call=>call.url==='/swap-sound').length;
+holdNextUpload=true;
+const submitUpload=()=>uploadForm.dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true}));
+submitUpload();submitUpload();
+assert.equal(calls.filter(call=>call.url==='/upload-sound').length,1,'duplicate submit should be blocked');
+assert.equal(document.getElementById('sound-upload-fields').disabled,true);
+assert.equal(document.getElementById('save-sound-upload').getAttribute('aria-busy'),'true');
+const firstUpload=calls.filter(call=>call.url==='/upload-sound')[0];
+assert.equal(firstUpload.headers['X-Upload-Password'],'test-password');assert.equal(firstUpload.body.get('file').name,'My upload.wav');assert.equal(firstUpload.body.get('emoji'),'🦆');assert.equal(firstUpload.body.get('description'),'A user uploaded clip');
+pendingUploadReply({ok:false,text:async()=> 'Incorrect upload password'});await new Promise(setImmediate);
+assert.equal(uploadDialog.hasAttribute('open'),true);assert.equal(document.getElementById('upload-error').textContent,'Incorrect upload password');assert.equal(document.getElementById('sound-upload-fields').disabled,false);
+submitUpload();await new Promise(setImmediate);
+assert.equal(uploadDialog.hasAttribute('open'),false);assert.ok(document.getElementById('upload-status').textContent.includes('My upload added'));assert.equal(uploadAudio.hidden,true);assert.equal(uploadPassword.value,'test-password');
+assert.equal(calls.filter(call=>call.url==='/swap-sound').length,beforeUploadSwaps,'upload only saves to library');
+await click('#open-sound-upload');uploadFile.files=[{name:'large.wav',size:11*1024*1024}];uploadFile.dispatchEvent(new window.Event('change'));
+assert.ok(document.getElementById('upload-error').textContent.includes('under 10 MB'));assert.equal(uploadAudio.hidden,true);
+const drop=new window.Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(drop,'dataTransfer',{value:{files:[new File(['audio'],'Dropped clip.ogg',{type:'audio/ogg'})]}});
+document.getElementById('upload-dropzone').dispatchEvent(drop);assert.equal(uploadName.value,'Dropped clip');assert.equal(uploadAudio.hidden,false);
+await click('#cancel-sound-upload');assert.equal(uploadAudio.hidden,true);assert.equal(uploadDialog.hasAttribute('open'),false);
+mobileToggle.checked=false;mobileToggle.dispatchEvent(new window.Event('change'));await click('#open-sound-upload');assert.equal(uploadDialog.hasAttribute('open'),false);
+console.log('PASS: preview-only upload dialog, file/drop preview, emoji selection, multipart fields, loading/duplicate guard, errors, success, size validation, and cleanup');

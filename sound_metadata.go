@@ -325,3 +325,29 @@ func soundMetadataHandler(store *SoundMetadataStore, knownName func(string) bool
 		http.ServeContent(w, r, "sound-metadata.json", time.Time{}, bytes.NewReader(data))
 	})
 }
+
+// Persist newly uploaded details before publishing them to in-memory readers.
+func (m *SoundMetadataStore) saveUploadedDetails(name, description, id, emoji string) error {
+	m.flushMu.Lock()
+	defer m.flushMu.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	tx, err := m.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec("INSERT INTO sound_metadata(name,description,emoji_id,emoji_name) VALUES(?,?,?,?) ON CONFLICT(name) DO UPDATE SET description=excluded.description,emoji_id=excluded.emoji_id,emoji_name=excluded.emoji_name", name, description, id, emoji); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("INSERT OR IGNORE INTO sound_emoji_overrides(name) VALUES(?)", name); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	m.data.Sounds[name] = SoundMetadata{Description: description, EmojiID: id, EmojiName: emoji, emojiEdited: true}
+	m.version++
+	m.dirty[name] = m.version
+	return nil
+}

@@ -34,6 +34,8 @@
                 <div id="soundboard-7" class="sound-card card-placeholder" aria-hidden="true"></div>
             </div>
             <section id="library-tools" class="library-tools" aria-label="Sound library tools" hidden>
+                <button id="open-sound-upload" type="button">Upload sound</button>
+                <p id="upload-status" role="status" hidden></p>
                 <label class="library-search-label" for="library-search">Search sounds</label>
                 <input id="library-search" type="search" placeholder="Search sounds…" autocomplete="off" maxlength="120">
                 <div class="library-filters" role="group" aria-label="Filter sounds">
@@ -84,6 +86,34 @@
             </div>
         </main>
     </div>
+    <dialog id="sound-upload" aria-labelledby="sound-upload-title">
+        <form id="sound-upload-form">
+            <h2 id="sound-upload-title">Upload a sound</h2>
+            <p class="details-help">Save a clip to the shared library. MP3, Ogg, or WAV; up to 5 seconds and 10 MB. Choose a unique name.</p>
+            <fieldset id="sound-upload-fields">
+                <div id="upload-dropzone">
+                    <label for="upload-file">Choose or drop an audio file</label>
+                    <input id="upload-file" name="file" type="file" accept=".mp3,.ogg,.wav,audio/mpeg,audio/ogg,audio/wav" required>
+                </div>
+                <audio id="upload-audio-preview" controls preload="metadata" hidden></audio>
+                <label for="upload-name">Sound name</label>
+                <input id="upload-name" name="name" type="text" minlength="2" maxlength="32" required autocomplete="off">
+                <label for="upload-description">Description or source</label>
+                <textarea id="upload-description" name="description" maxlength="2000" rows="3"></textarea>
+                <label for="upload-emoji">Emoji (optional)</label>
+                <button id="upload-choose-emoji" type="button" aria-expanded="false" aria-controls="upload-emoji-picker">Choose emoji</button>
+                <div id="upload-emoji-picker" hidden></div>
+                <input id="upload-emoji" name="emoji" type="text" maxlength="100" autocomplete="off" placeholder="Choose or paste an emoji">
+                <label for="upload-password">Upload password</label>
+                <input id="upload-password" type="password" autocomplete="current-password" required>
+            </fieldset>
+            <p id="upload-error" role="alert"></p>
+            <div class="details-actions">
+                <button id="cancel-sound-upload" type="button">Cancel</button>
+                <button id="save-sound-upload" type="submit">Add to library</button>
+            </div>
+        </form>
+    </dialog>
     <dialog id="sound-details" aria-labelledby="sound-details-title">
         <form id="sound-details-form">
             <h2 id="sound-details-title">Sound details</h2>

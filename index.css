@@ -362,3 +362,21 @@ html.ui-preview #library-tools[hidden] { display: block !important; }
 .emoji-grid button:hover { background: var(--border); }
 .emoji-grid img { width: 1.75rem; height: 1.75rem; }
 .emoji-grid button:focus-visible, #choose-sound-emoji:focus-visible, #clear-sound-emoji:focus-visible { outline: 2px solid #0284c7; outline-offset: -2px; }
+
+#open-sound-upload { float: right; min-height: 44px; padding: 0.5rem 0.75rem; margin: 0 0 0.5rem 0.5rem; border: 1px solid #0284c7; border-radius: 0.5rem; color: #0284c7; }
+#upload-status { clear: both; font-size: 0.875rem; margin-bottom: 0.5rem; }
+#sound-upload { width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; padding: 1.25rem; border: 0; border-radius: 0.75rem; background: var(--card); color: var(--text); }
+#sound-upload:not([open]) { display: none; }
+#sound-upload::backdrop { background: #0008; }
+#sound-upload h2 { font-size: 1.25rem; }
+#sound-upload-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+#sound-upload label { display: block; font-weight: 600; margin: 0.75rem 0 0.375rem; }
+#sound-upload input, #sound-upload textarea { width: 100%; min-height: 44px; padding: 0.5rem; border: 1px solid #94a3b8; border-radius: 0.375rem; background: var(--card); color: var(--text); font: inherit; }
+#upload-audio-preview { width: 100%; margin-top: 0.5rem; }
+#upload-choose-emoji { min-height: 44px; padding: 0.375rem 0.75rem; border: 1px solid #94a3b8; border-radius: 0.375rem; margin-bottom: 0.5rem; }
+#upload-error { margin-top: 0.5rem; overflow-wrap: anywhere; }
+#save-sound-upload { background: #0369a1; color: white; }
+#save-sound-upload[aria-busy="true"] { display: inline-flex; align-items: center; gap: 0.5rem; }
+
+#upload-dropzone { padding: 0.5rem; margin-top: 0.5rem; border: 2px dashed var(--border); border-radius: 0.5rem; }
+#upload-dropzone label { margin-top: 0; }

@@ -187,3 +187,26 @@ from emoji already stored in sound metadata. Selecting one fills the editor;
 **Save details** persists it. **Remove emoji** clears the choice. The palette is a
 separate lazy-loaded local JavaScript chunk, with no external picker scripts or
 emoji image sheets. Unicode/custom values can still be pasted directly.
+
+Enable **Preview new UI**, then **Upload sound**, to add a clip to the server
+library. Choose/drop MP3, Ogg, or WAV audio, preview it locally, and enter a unique
+2–32 character name, description, optional emoji, and the shared upload password.
+Source clips must be no longer than five seconds and at most 10 MiB. FFprobe
+validates the audio; FFmpeg prepares a 128 kbps stereo MP3 before publication.
+The converted file is checked against Discord's size/duration limits. Files with
+existing MP3/Ogg names are rejected. Successful uploads update all connected
+libraries and their prepared upload cache, then use the usual + / Choose slot
+flow to send the sound to Discord. Uploading to the library does not create a
+Discord sound automatically. There is no visual trimmer in this first version.
+
+The service needs `ffmpeg` (with `libmp3lame`) and `ffprobe` on PATH. Only one
+upload/conversion is processed at a time, with a 30-second processing timeout.
+The UI module loads on demand. File and metadata failures clean up pending files;
+completed files are published atomically and existing sounds are not overwritten.
+
+Set `UPLOAD_PASSWORD` or `UPLOAD_PASSWORD_FILE` in the service environment to
+configure upload access. Otherwise the service generates a random password in
+`data/upload-password` (next to the SQLite file), with owner-only permissions.
+Read that local file to obtain the shared password. It is never returned by the
+web API or stored in browser localStorage; the form remembers it only in the
+current page. Password checks happen before multipart parsing or audio work.

@@ -7,6 +7,15 @@ const decoratedCards = new WeakMap<HTMLElement, { enabled: boolean; name: string
 
 export const getSoundMetadata = (name: string): SoundMetadata | undefined => metadata[name];
 
+export const customEmojiChoices = () => {
+    const ids = new Set<string>();
+    return Object.entries(metadata).flatMap(([sound, value]) => {
+        if (!value.emoji_id || !/^\d+$/.test(value.emoji_id) || ids.has(value.emoji_id)) return [];
+        ids.add(value.emoji_id);
+        return [{value: value.emoji_id, label: `${sound} custom emoji`, group: 'Custom', image: `https://cdn.discordapp.com/emojis/${value.emoji_id}.webp?size=32`}];
+    });
+};
+
 const applyMetadata = (value: unknown) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
     const next: Record<string, SoundMetadata> = Object.create(null);
@@ -122,13 +131,7 @@ export const initSoundMetadata = (updated: () => void) => {
         try {
             const { mountEmojiPicker } = await import('./emoji-picker');
             if (version !== pickerVersion || !dialog?.hasAttribute('open')) return;
-            const ids = new Set<string>();
-            const custom = Object.entries(metadata).flatMap(([sound, value]) => {
-                if (!value.emoji_id || !/^\d+$/.test(value.emoji_id) || ids.has(value.emoji_id)) return [];
-                ids.add(value.emoji_id);
-                return [{value: value.emoji_id, label: `${sound} custom emoji`, group: 'Custom', image: `https://cdn.discordapp.com/emojis/${value.emoji_id}.webp?size=32`}];
-            });
-            mountEmojiPicker(pickerRoot, custom, value => {
+            mountEmojiPicker(pickerRoot, customEmojiChoices(), value => {
                 emojiInput.value = value;
                 hidePicker();
                 pickerButton.focus();

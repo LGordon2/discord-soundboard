@@ -383,6 +383,19 @@ initUIPreview();
 initLibraryPreview(recordRecentSound, () => Boolean(muted.state), stopBoardPreviews);
 initMobilePreview();
 initSoundMetadata(syncLibraryPreview);
+let uploadReady: Promise<() => void> | undefined;
+document.getElementById('open-sound-upload')?.addEventListener('click', async () => {
+    if (!document.body.classList.contains('ui-preview')) return;
+    try {
+        uploadReady ||= import('./sound-upload').then(module => module.initSoundUpload());
+        const open = await uploadReady;
+        open();
+    } catch {
+        uploadReady = undefined;
+        const status = document.getElementById('upload-status');
+        if (status) {status.hidden = false; status.textContent = 'Could not load the uploader. Try again.';}
+    }
+});
 enableDragDropTouch();
 connectBoard({
     hydrate,

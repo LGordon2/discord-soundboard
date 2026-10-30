@@ -145,6 +145,7 @@ type UserInfo struct {
 
 func main() {
 	userInfoCache := make(map[string]UserInfo)
+	var userInfoMu sync.RWMutex
 
 	m := minify.New()
 	m.AddFunc("text/html", html.Minify)
@@ -157,6 +158,9 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	var library atomic.Pointer[soundLibrary]
+	library.Store(&soundLibrary{files: storedSounds, uploads: storedSoundMap})
+	var libraryMu sync.Mutex
 	discordClient := NewDiscordRestClient(authToken, "")
 
 	metadataFile := os.Getenv("SOUND_METADATA_FILE")
@@ -267,9 +271,11 @@ func main() {
 		for _, sound := range newSounds {
 			slot := liveSlot{Slot: sound.ordinal, ID: sound.ID, Name: sound.Name, CanRemove: true}
 			if sound.ID != "" {
+				userInfoMu.RLock()
 				user := userInfoCache[sound.UserID]
+				userInfoMu.RUnlock()
 				slot.CanSend = userIsInChannel.Load()
-				slot.CanSave = !storedSoundMap.containsName(sound.Name)
+				slot.CanSave = !library.Load().uploads.containsName(sound.Name)
 				slot.CanRemove = sound.UserID == discordClient.userID
 				slot.Username = user.Username
 				slot.Avatar = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.webp", sound.UserID, user.Avatar)
@@ -295,8 +301,9 @@ func main() {
 	}
 	updateStoredSounds := func(soundsWithOrdinal []SoundboardSoundWithOrdinal) *bytes.Buffer {
 		event := boardEvent(soundsWithOrdinal, true)
-		files := make([]liveFile, 0, len(storedSounds))
-		for _, file := range storedSounds {
+		snapshot := library.Load()
+		files := make([]liveFile, 0, len(snapshot.files))
+		for _, file := range snapshot.files {
 			ext := filepath.Ext(file)
 			files = append(files, liveFile{Name: strings.TrimSuffix(file, ext), Ext: ext})
 		}
@@ -305,6 +312,35 @@ func main() {
 		buf.Write(liveFrame(event))
 		return &buf
 	}
+
+	passwordFile := os.Getenv("UPLOAD_PASSWORD_FILE")
+	if passwordFile == "" {
+		passwordFile = filepath.Join(filepath.Dir(databaseFile), "upload-password")
+	}
+	uploadPassword, uploadPasswordErr := loadUploadPassword(passwordFile)
+	if uploadPasswordErr != nil {
+		log.Printf("[warn] uploads unavailable: %v", uploadPasswordErr)
+	}
+	http.Handle("/upload-sound", &soundUploadHandler{directory: soundsDir, password: uploadPassword, metadata: metadata, commitMu: &libraryMu, running: make(chan struct{}, 1), convert: convertUpload, publish: func(filename string, request CreateSoundboardSoundRequest) {
+		old := library.Load()
+		files := append(append([]string{}, old.files...), filename)
+		sort.Slice(files, func(i, j int) bool { return strings.ToLower(files[i]) < strings.ToLower(files[j]) })
+		uploads := make(map[string]CreateSoundboardSoundRequest, len(old.uploads)+1)
+		for name, cached := range old.uploads {
+			uploads[name] = cached
+		}
+		uploads[filename] = request
+		library.Store(&soundLibrary{files: files, uploads: uploads})
+		soundsMu.RLock()
+		current := make([]SoundboardSoundWithOrdinal, 0, len(sounds))
+		for slot, sound := range sounds {
+			current = append(current, SoundboardSoundWithOrdinal{SoundboardSound: sound, ordinal: slot})
+		}
+		soundsMu.RUnlock()
+		frame := updateStoredSounds(current)
+		frame.Write(liveFrame(liveEvent{Type: "metadata"}))
+		msgUpdates <- frame.Bytes()
+	}})
 
 	go func() {
 		for newSounds := range soundUpdates {
@@ -380,6 +416,11 @@ func main() {
 			return err
 		}
 
+		libraryMu.Lock()
+		defer libraryMu.Unlock()
+		if library.Load().uploads.containsName(soundName) {
+			return nil
+		}
 		err = os.WriteFile(path.Join(soundsDir, soundName+"."+extension), data, 0644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[error] saving file, could not write to disk: %v\n", err)
@@ -404,8 +445,7 @@ func main() {
 		soundsMu.RUnlock()
 
 		if newStoredSounds, newStoredSoundMap, err := fetchStoredSounds(); err == nil {
-			storedSounds = newStoredSounds
-			storedSoundMap = newStoredSoundMap
+			library.Store(&soundLibrary{files: newStoredSounds, uploads: newStoredSoundMap})
 			if soundboardSound != (SoundboardSoundWithOrdinal{}) {
 				soundUpdates <- []SoundboardSoundWithOrdinal{
 					soundboardSound,
@@ -591,7 +631,7 @@ func main() {
 			return sounds
 		},
 		execute: func(input swapSoundInput) (CreateSoundboardSoundResponse, error) {
-			return swapSoundResult(discordClient, storedSoundMap, input)
+			return swapSoundResult(discordClient, library.Load().uploads, input)
 		},
 		refresh: func(current [soundboardSoundCount]SoundboardSound) {
 			updates := make([]SoundboardSoundWithOrdinal, 0, len(current))
@@ -630,7 +670,7 @@ func main() {
 			buf.WriteString(fmt.Sprintf("<li>%s (%s) <button onclick=\"new Audio('https://cdn.discordapp.com/soundboard-sounds/%s').play()\">Play</button><button data-action=\"delete\" data-soundid=\"%s\" data-guildid=\"%s\">Delete</button></li>", sound.Name, sound.ID, sound.ID, sound.ID, guildID))
 		}
 		soundsMu.RUnlock()
-		for _, storedSound := range storedSounds {
+		for _, storedSound := range library.Load().files {
 			buf.WriteString(fmt.Sprintf("<li class=\"add-sound-component\" data-soundname=\"%s\" data-soundext=\"%s\">%s <button data-action=\"add\">Add</button></li>", htmlEscape.EscapeString(strings.TrimSuffix(storedSound, path.Ext(storedSound))), path.Ext(storedSound), htmlEscape.EscapeString(storedSound)))
 		}
 		buf.WriteString("</ul>")
@@ -839,11 +879,13 @@ func main() {
 			} else if *recvMsg.Type == "READY" {
 				for _, user := range dmd.Users {
 					if user.Avatar != "" {
+						userInfoMu.Lock()
 						userInfoCache[user.ID] = UserInfo{
 							UserID:   user.ID,
 							Avatar:   user.Avatar,
 							Username: user.Username,
 						}
+						userInfoMu.Unlock()
 					}
 				}
 			} else if *recvMsg.Type == "SOUNDBOARD_SOUNDS" && dmd.GuildID == guildID {
@@ -854,9 +896,11 @@ func main() {
 						metadataChanged = true
 					}
 					if sound.User.Avatar != "" {
+						userInfoMu.Lock()
 						old := userInfoCache[sound.UserID]
 						old.Avatar = sound.User.Avatar
 						userInfoCache[sound.UserID] = old
+						userInfoMu.Unlock()
 					}
 					incoming = append(incoming, SoundboardSound{Name: sound.Name, ID: sound.SoundID, UserID: sound.UserID, Avatar: sound.User.Avatar})
 				}
@@ -872,7 +916,7 @@ func main() {
 					publishMetadata()
 				}
 				for _, sound := range newSounds {
-					if sound.ID != "" && !storedSoundMap.containsName(sound.Name) {
+					if sound.ID != "" && !library.Load().uploads.containsName(sound.Name) {
 						fmt.Printf("attempting to save new sound %v\n", sound.Name)
 						saveSoundFunc(sound.ID, sound.Name)
 					}
