@@ -74,7 +74,19 @@ html #storedsounds, html .library-tools { width: min(calc(80rem + max(0, var(--l
 .sound-setting input:focus-visible + .switch-track { outline: 3px solid #93c5fd; outline-offset: 2px; }
 .viewer-count { display: flex; align-items: center; padding: 1rem; }
 .viewer-total { width: 2rem; height: 2rem; font-size: 1.25rem; }
-@media (min-width: 1024px) { #playable-sounds { position: sticky; top: 0; z-index: 10; background: var(--page); } }
+@media (min-width: 1024px) {
+    #playable-sounds {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        width: 100%;
+        margin-inline: 0;
+        padding: 0.5rem max(1rem, calc((100% - 80rem) / 2));
+        padding-bottom: 0;
+        margin-bottom: 0;
+        background: var(--page);
+    }
+}
 @media (prefers-color-scheme: dark) { :root { --page: #111827; --card: #1f2937; --text: #fff; --border: #374151; } }
 
 [hidden], .hidden { display: none !important; }
