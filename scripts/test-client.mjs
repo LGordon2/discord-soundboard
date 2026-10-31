@@ -8,6 +8,9 @@ const html=fs.readFileSync(join(dist, 'index.html'),'utf8');
 assert.ok(html.split('\n').length <= 2, 'production HTML should be minified');
 const {window}=parseHTML(html);
 for(const key of ['window','document','Element','HTMLElement','MutationObserver','Event']) globalThis[key]=key==='window'?window:window[key];
+// Linkedom's select.value lacks a setter; model native option selection.
+const selectPrototype=Object.getPrototypeOf(document.createElement('select'));
+if(!Object.getOwnPropertyDescriptor(selectPrototype,'value')?.set)Object.defineProperty(selectPrototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.getAttribute('value')||this.querySelector('option')?.getAttribute('value')||''},set(value){for(const option of this.querySelectorAll('option'))option.toggleAttribute('selected',option.getAttribute('value')===value)}});
 for (const input of document.querySelectorAll('input')) input.checked=false;
 Object.defineProperty(window.HTMLElement.prototype,'inert',{get(){return this.hasAttribute('inert')},set(value){if(value)this.setAttribute('inert','');else this.removeAttribute('inert')}});
 const initialLayout=document.createElement('style');
@@ -24,6 +27,7 @@ assert.equal(document.documentElement.classList.contains('ui-preview'),true);
 preferences.delete('soundboard-ui-preview');
 document.documentElement.classList.remove('ui-preview');
 window.location={href:'https://discord-soundboard.lewgordon.com/'};
+window.innerWidth=2560;
 const mobileListeners=new Set();
 const mobileMedia={matches:false,addEventListener:(event,fn)=>mobileListeners.add(fn)};
 window.matchMedia=()=>mobileMedia;
@@ -299,8 +303,7 @@ assert.match(html,/<main id="sounds"/);
 assert.match(html,/<meta name="description"/);
 assert.match(css,/\[hidden\][^{]*\{display:none!important\}/);
 assert.match(css,/prefers-color-scheme:dark/);
-assert.match(css,/min-width:1024px[^}]+#playable-sounds,#storedsounds\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
-assert.match(css,/min-width:640px[^}]+#playable-sounds,#storedsounds\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+assert.match(css,/#playable-sounds,#storedsounds\{display:grid;grid-template-columns:repeat\(auto-fill,minmax\(min\(100%,15rem\),1fr\)\);gap:1rem;width:min\(80rem,calc\(100% - 2rem\)\)/);
 console.log('PASS: production controls and analytics; opt-in preview, search, favorites, recent filter, disabling preview, capacity permissions, description subtext, fuzzy search, aligned SVG icons, and plain minified CSS');
 
 // Exercise the negotiated JSON protocol through the production socket handler.
@@ -543,9 +546,6 @@ assert.equal(document.querySelector('[data-soundname="Editable emoji"] .sound-em
 assert.equal(details.hasAttribute('open'),false);
 console.log('PASS: emoji dialog prefill, Unicode/custom edits, removal, shared rendering, and validation errors');
 
-// Linkedom's select.value lacks a setter; model native option selection.
-const selectPrototype=Object.getPrototypeOf(document.createElement('select'));
-if(!Object.getOwnPropertyDescriptor(selectPrototype,'value')?.set)Object.defineProperty(selectPrototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.getAttribute('value')||this.querySelector('option')?.getAttribute('value')||''},set(value){for(const option of this.querySelectorAll('option'))option.toggleAttribute('selected',option.getAttribute('value')===value)}});
 await click('[data-edit-description="Editable emoji"]');
 await click('#choose-sound-emoji');
 for(let i=0;i<100&&!document.querySelector('.emoji-grid button');i++)await new Promise(resolve=>setTimeout(resolve,10));
@@ -749,4 +749,22 @@ assert.equal(menuMute.closest('.sound-settings').parentElement.id,'sound-setting
 mobileToggle.checked=true;mobileToggle.dispatchEvent(new window.Event('change'));await new Promise(resolve=>setTimeout(resolve,10));
 assert.equal(menuMute.closest('.sound-settings').parentElement.id,'preview-sound-settings');assert.equal(menuMute.checked,true);
 assert.equal(document.getElementById('preview-account-menu').hidden,false);
+const libraryColumns=document.getElementById('library-columns');
+assert.equal(libraryColumns.closest('.sound-settings').parentElement.id,'preview-sound-settings');
+assert.equal(libraryColumns.value,'4');
+libraryColumns.value='3';libraryColumns.dispatchEvent(new window.Event('change',{bubbles:true}));
+assert.equal(preferences.get('soundboard-library-columns'),'3');
+assert.equal(document.documentElement.style.getPropertyValue('--library-columns'),'3');
+libraryColumns.value='8';libraryColumns.dispatchEvent(new window.Event('change',{bubbles:true}));
+assert.equal(preferences.get('soundboard-library-columns'),'8');
+assert.equal(document.documentElement.style.getPropertyValue('--library-columns'),'8');
+window.innerWidth=1280;window.dispatchEvent(new window.Event('resize'));
+assert.equal(libraryColumns.querySelectorAll('option').length,4);
+assert.equal(libraryColumns.value,'4');
+assert.equal(document.documentElement.style.getPropertyValue('--library-columns'),'4');
+assert.equal(preferences.get('soundboard-library-columns'),'8');
+window.innerWidth=2560;window.dispatchEvent(new window.Event('resize'));
+assert.equal(libraryColumns.querySelectorAll('option').length,9);
+assert.equal(libraryColumns.value,'8');
+assert.ok(css.replace(/\s/g,'').includes('width:min(calc(80rem+max(0,var(--library-columns,4)-4)*16rem),calc(100%-2rem))'));
 console.log('PASS: gear settings work while logged out, keep toggles open, persist preferences, and restore classic layout');

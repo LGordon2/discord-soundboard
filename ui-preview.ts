@@ -104,6 +104,36 @@ export const recordRecentSound = (name: string) => {
 };
 
 export const initUIPreview = () => {
+    const columns = document.getElementById('library-columns') as HTMLSelectElement | null;
+    if (columns) {
+        const normalize = (value: string) => {
+            const number = Number(value);
+            return Number.isInteger(number) && number >= 1 && number <= 12 ? number : 4;
+        };
+        let preferred = normalize(read('soundboard-library-columns') || '4');
+        const applyColumns = () => {
+            const rem = parseFloat(window.getComputedStyle?.(document.documentElement).fontSize || '16');
+            // Cards need 15rem, plus 1rem gaps and 1rem on each side.
+            const limit = Math.max(1, Math.min(12, Math.floor((window.innerWidth / rem - 1) / 16)));
+            columns.replaceChildren();
+            for (let count = 1; count <= limit; count++) {
+                const option = document.createElement('option');
+                option.value = String(count);
+                option.textContent = String(count);
+                columns.append(option);
+            }
+            const maximum = String(Math.min(preferred, limit));
+            columns.value = maximum;
+            document.documentElement.style.setProperty('--library-columns', maximum);
+        };
+        applyColumns();
+        columns.addEventListener('change', () => {
+            preferred = normalize(columns.value);
+            write('soundboard-library-columns', String(preferred));
+            applyColumns();
+        });
+        window.addEventListener('resize', applyColumns);
+    }
     const toggle = document.getElementById('ui-preview-toggle') as HTMLInputElement | null;
     const tools = document.getElementById('library-tools');
     if (!toggle || !tools) return;
