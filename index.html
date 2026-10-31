@@ -28,8 +28,10 @@
                         </button>
                         <div id="preview-account-navigation" role="group" aria-label="Settings" hidden>
                             <div id="preview-sound-settings"></div>
+
                             <a id="account-analytics-link" href="/analytics" hidden><span aria-hidden="true">📊</span> Analytics</a>
                             <a id="account-admin-link" href="/admin" hidden><span aria-hidden="true">🔧</span> Manage sounds</a>
+                            <button id="open-keyboard-shortcuts" type="button" aria-haspopup="dialog" aria-controls="keyboard-shortcuts">Keyboard shortcuts</button>
                         </div>
                     </div>
                     <a id="preview-account-login" class="discord-sign-in" href="/auth/discord?next=/" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.79 19.79 0 0 0-4.885-1.515c-.211.375-.457.88-.626 1.28a18.4 18.4 0 0 0-5.416 0 12.94 12.94 0 0 0-.636-1.28A19.74 19.74 0 0 0 3.87 4.37C.78 8.946-.057 13.408.362 17.808a19.9 19.9 0 0 0 5.993 3.03c.486-.662.917-1.36 1.285-2.095a12.9 12.9 0 0 1-2.024-.963c.17-.124.336-.254.497-.387 3.9 1.803 8.137 1.803 11.99 0 .163.133.329.263.497.387-.644.378-1.32.7-2.027.965.368.734.798 1.433 1.285 2.095a19.84 19.84 0 0 0 5.996-3.032c.49-5.101-.838-9.523-3.537-13.438ZM8.02 15.115c-1.17 0-2.13-1.074-2.13-2.388s.94-2.39 2.13-2.39c1.188 0 2.15 1.075 2.13 2.39 0 1.314-.941 2.388-2.13 2.388Zm7.96 0c-1.17 0-2.13-1.074-2.13-2.388s.94-2.39 2.13-2.39c1.188 0 2.15 1.075 2.13 2.39 0 1.314-.92 2.388-2.13 2.388Z"/></svg><span>Sign in with Discord</span></a>
@@ -55,7 +57,9 @@
                 <button id="open-sound-upload" type="button">Upload sound</button>
                 <p id="upload-status" role="status" hidden></p>
                 <label class="library-search-label" for="library-search">Search sounds</label>
-                <input id="library-search" type="search" placeholder="Search sounds…" autocomplete="off" maxlength="120">
+                <p class="library-shortcuts">Q W E R / A S D F to send uploaded slots · / to search · ↑/↓ in search to select · Shift + Q W E R / A S D F to replace a slot · Esc to leave search · [ / ] to change filter</p>
+                <input id="library-search" aria-describedby="keyboard-selection" aria-keyshortcuts="/ ArrowDown ArrowUp Escape" type="search" placeholder="Search sounds…" autocomplete="off" maxlength="120">
+                <p id="keyboard-selection" class="library-shortcuts" role="status" aria-live="polite"></p>
                 <div class="library-filters" role="group" aria-label="Filter sounds">
                     <button type="button" data-library-filter="all" aria-pressed="true">All</button>
                     <button type="button" data-library-filter="favorites" aria-pressed="false">Favorites</button>
@@ -110,6 +114,24 @@
             </div>
         </main>
     </div>
+    <dialog id="keyboard-shortcuts" class="shortcut-cheatsheet" aria-labelledby="keyboard-shortcuts-title">
+        <div class="shortcut-dialog-header">
+            <h2 id="keyboard-shortcuts-title">Keyboard shortcuts</h2>
+            <button id="close-keyboard-shortcuts" type="button" aria-label="Close keyboard shortcuts" autofocus>×</button>
+        </div>
+        <table aria-label="Keyboard shortcuts">
+                                    <tbody>
+                                        <tr><th scope="row"><kbd>Q W E R</kbd></th><td>Send slots 1–4</td></tr>
+                                        <tr><th scope="row"><kbd>A S D F</kbd></th><td>Send slots 5–8</td></tr>
+                                        <tr><th scope="row"><kbd>/</kbd></th><td>Focus search</td></tr>
+                                        <tr><th scope="row"><kbd>Esc</kbd></th><td>Leave search and return to the board</td></tr>
+                                        <tr><th scope="row"><kbd>↑</kbd> <kbd>↓</kbd></th><td>Select a search result</td></tr>
+                                        <tr><th scope="row"><kbd>Shift</kbd> + slot key</th><td>Replace that slot with the selected result</td></tr>
+                                        <tr><th scope="row"><kbd>[</kbd> <kbd>]</kbd></th><td>Previous / next filter</td></tr>
+                                    </tbody>
+                                </table>
+                                <p>Search, select a result, then hold Shift and press its destination slot key to swap. Press Escape to leave search, then the same slot key to send once the swap finishes. Sending and filter shortcuts stay off while typing; selection and swapping work in search.</p>
+                                </dialog>
     <dialog id="sound-upload" aria-labelledby="sound-upload-title">
         <form id="sound-upload-form">
             <div class="upload-dialog-header">

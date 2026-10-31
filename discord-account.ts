@@ -45,6 +45,13 @@ export const initAccountHeader = () => {
         if(event.key==='Escape' && !navigation.hidden) {event.preventDefault();closeMenu();menuToggle.focus();}
     });
     navigation.addEventListener('click', event => {if(event.target instanceof Element && event.target.closest('a'))closeMenu();});
+    const shortcuts = document.getElementById('keyboard-shortcuts') as HTMLDialogElement;
+    document.getElementById('open-keyboard-shortcuts')?.addEventListener('click', () => {
+        closeMenu();
+        shortcuts.showModal();
+    });
+    document.getElementById('close-keyboard-shortcuts')?.addEventListener('click', () => shortcuts.close());
+    shortcuts.addEventListener('close', () => menuToggle.focus());
     const soundSettings = document.querySelector<HTMLElement>('.sound-settings')!;
     const syncSettings = () => {
         const destination = document.getElementById(enabled() ? 'preview-sound-settings' : 'sound-settings-home')!;
